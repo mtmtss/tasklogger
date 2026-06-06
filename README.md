@@ -5,33 +5,6 @@ Google Tasks と Google Apps Script を使って、日々のタスク実行時�
 このリポジトリは、他者に共有しても個人情報や機密情報を含めない形を前提に整理しています。
 
 配布対象の本体は `apps_script/` です。
-`existing_gas/` はローカル移行前の旧ディレクトリなので、配布物には含めない前提で扱ってください。
-
-## この共有方法が最も実用的
-
-このプロジェクトを他者に共有するなら、最も再現性が高いのは次の形です。
-
-1. ソースコードは Git リポジトリで共有する
-2. Apps Script プロジェクト ID、デプロイ ID、Spreadsheet ID、API キー、メールアドレスはリポジトリに含めない
-3. 各利用者が自分の Google アカウントで Apps Script プロジェクトを作成し、初期化関数を 1 回実行する
-4. 各利用者が自分の Google Tasks と自分の Spreadsheet に接続して使う
-
-理由:
-
-- Apps Script / Google Tasks / Spreadsheet は Google アカウント依存
-- `scriptId` や `deploymentId` は共有物ではなく利用者ごとに持つべき値
-- Spreadsheet をコードに固定すると、共有時にデータや個人情報が混ざる
-- Script Properties に設定を持たせると、ソースコードと秘密情報を分離できる
-
-## このリポジトリに含めないもの
-
-次の値はコミットしないでください。
-
-- Apps Script の `scriptId`
-- Web アプリの `deploymentId`
-- Script Properties に入れる `geminiApiKey`
-- Script Properties または settings シートに入れる `reportEmail`
-- 利用中の Spreadsheet ID
 
 ## ディレクトリ構成
 
@@ -231,12 +204,3 @@ Apps Script エディタで `Tasks API` 高度なサービスを追加してく�
 ### Gemini 関連で失敗する
 
 `geminiApiKey` を設定していないか、キーの権限不足です。未設定ならフォールバックで動く設計です。
-
-## 推奨運用
-
-他者共有用には、以下の2層で管理するのが安定です。
-
-1. Git リポジトリ
-2. 各利用者の Apps Script プロジェクト
-
-この分離により、ソース共有と個人設定の境界が明確になります。
