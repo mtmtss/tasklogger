@@ -1,0 +1,16 @@
+1. 現在のデプロイ一覧を確認
+clasp deployments
+
+2. 新しいバージョンを作成
+clasp version "release YYYY-MM-DD"
+
+3. 既存デプロイを更新する場合
+$DEPLOYMENT_ID="REPLACE_WITH_YOUR_DEPLOYMENT_ID"
+$VERSION_NUMBER=REPLACE_WITH_NEW_VERSION_NUMBER
+clasp redeploy $DEPLOYMENT_ID --versionNumber $VERSION_NUMBER --description "release YYYY-MM-DD"
+
+4. 新規に Web アプリとしてデプロイする場合
+clasp deploy --description "initial web app"
+
+5. デプロイ済み Web アプリを開く
+clasp open-web-app $DEPLOYMENT_ID

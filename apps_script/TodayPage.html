@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <? if (APPLE_TOUCH_ICON_URL) { ?>
+      <link rel="apple-touch-icon" sizes="180x180" href="<?= APPLE_TOUCH_ICON_URL ?>">
+      <link rel="icon" type="image/png" sizes="180x180" href="<?= APPLE_TOUCH_ICON_URL ?>">
+    <? } ?>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="今日のタスク">
+    <meta name="theme-color" content="#2563eb">
+    <style>
+      :root {
+        --bg: #07111f;
+        --bg-2: #0c1730;
+        --card: rgba(9, 18, 38, 0.86);
+        --card-strong: rgba(11, 22, 46, 0.96);
+        --line: rgba(88, 144, 255, 0.28);
+        --line-strong: rgba(56, 189, 248, 0.55);
+        --text: #e6f1ff;
+        --muted: #8fa8d8;
+        --blue: #4cc9f0;
+        --blue-2: #3a86ff;
+        --pink: #ff4fd8;
+        --blue-soft: rgba(76, 201, 240, 0.16);
+        --amber-soft: rgba(255, 184, 77, 0.16);
+        --green-soft: rgba(52, 211, 153, 0.16);
+        --gray-soft: rgba(148, 163, 184, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(76, 201, 240, 0.16), transparent 24%),
+          radial-gradient(circle at top right, rgba(255, 79, 216, 0.12), transparent 22%),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        background: rgba(7, 17, 31, 0.82);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(76, 201, 240, 0.18);
+        box-shadow: 0 0 28px rgba(0, 0, 0, 0.28);
+      }
+
+      .nav-title {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .nav-link,
+      button {
+        border: 1px solid rgba(76, 201, 240, 0.28);
+        border-radius: 999px;
+        background: rgba(9, 18, 38, 0.78);
+        color: var(--text);
+        padding: 9px 14px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 14px;
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .nav-link:hover,
+      button:hover {
+        transform: translateY(-1px);
+        border-color: rgba(76, 201, 240, 0.52);
+        box-shadow: 0 0 0 1px rgba(76, 201, 240, 0.2), 0 12px 24px rgba(9, 18, 38, 0.28);
+      }
+
+      .nav-link.is-active {
+        background: linear-gradient(135deg, rgba(58, 134, 255, 0.92), rgba(255, 79, 216, 0.82));
+        border-color: rgba(124, 211, 255, 0.75);
+        color: #f8fbff;
+        box-shadow: 0 0 20px rgba(76, 201, 240, 0.2);
+      }
+
+      .hero,
+      .card,
+      .summary-card,
+      .task,
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgba(2, 6, 23, 0.34);
+      }
+
+      .hero {
+        padding: 20px;
+        margin-bottom: 16px;
+        background:
+          linear-gradient(135deg, rgba(76, 201, 240, 0.1), transparent 45%),
+          linear-gradient(180deg, rgba(9, 18, 38, 0.96), rgba(11, 22, 46, 0.92));
+      }
+
+      .hero-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .hero-title {
+        font-size: 28px;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: 0.03em;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .error-panel {
+        display: none;
+        background: rgba(76, 5, 25, 0.65);
+        border: 1px solid rgba(251, 113, 133, 0.45);
+        color: #ffd4df;
+        padding: 12px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        white-space: pre-wrap;
+      }
+
+      .top-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .summary-card {
+        padding: 16px;
+      }
+
+      .summary-label {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .summary-value {
+        margin-top: 4px;
+        font-size: 28px;
+        font-weight: 800;
+        text-shadow: 0 0 18px rgba(76, 201, 240, 0.16);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
+        gap: 16px;
+      }
+
+      .panel {
+        padding: 16px;
+        background:
+          linear-gradient(180deg, rgba(11, 22, 46, 0.94), rgba(7, 17, 31, 0.9));
+      }
+
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        letter-spacing: 0.04em;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      details.group {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(11, 22, 46, 0.72);
+        overflow: hidden;
+      }
+
+      details.group summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        font-weight: 700;
+        background: linear-gradient(90deg, rgba(58, 134, 255, 0.08), rgba(255, 79, 216, 0.06));
+      }
+
+      details.group summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .group-body {
+        padding: 0 12px 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .task {
+        padding: 14px;
+      }
+
+      .task-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .task-title {
+        font-weight: 700;
+        margin-top: 4px;
+        letter-spacing: 0.01em;
+      }
+
+      .status-chip {
+        display: inline-block;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+
+      .status-not-started {
+        background: var(--gray-soft);
+        color: #d8e3f8;
+      }
+
+      .status-running {
+        background: var(--blue-soft);
+        color: #8deaff;
+      }
+
+      .status-paused {
+        background: var(--amber-soft);
+        color: #ffd37d;
+      }
+
+      .status-completed {
+        background: var(--green-soft);
+        color: #94f7c3;
+      }
+
+      .task-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 88px;
+        border: 1px solid rgba(76, 201, 240, 0.24);
+        border-radius: 12px;
+        padding: 10px;
+        resize: vertical;
+        background: rgba(6, 14, 30, 0.9);
+        color: var(--text);
+      }
+
+      .time-bar {
+        height: 8px;
+        background: rgba(18, 31, 63, 0.95);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 8px;
+        box-shadow: inset 0 0 0 1px rgba(76, 201, 240, 0.1);
+      }
+
+      .time-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--blue), var(--pink) 52%, var(--blue-2));
+        border-radius: 999px;
+        box-shadow: 0 0 16px rgba(76, 201, 240, 0.35);
+      }
+
+      .analytics-list,
+      .candidate-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .compact-item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(11, 22, 46, 0.78);
+      }
+
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav">
+      <div class="nav-title">今日のタスク</div>
+      <div class="nav-links">
+        <a class="nav-link is-active" href="<?= APP_BASE_URL ?>">今日</a>
+        <a class="nav-link" href="<?= APP_BASE_URL ?>?page=archive">アーカイブ</a>
+      </div>
+    </div>
+
+    <div class="page">
+      <div id="error" class="error-panel"></div>
+
+      <section class="hero">
+        <div class="hero-top">
+          <div>
+            <h1 class="hero-title">今日のタスク管理</h1>
+            <div id="today" class="meta"></div>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button onclick="loadTasks()">再読み込み</button>
+          <a class="nav-link" href="<?= APP_BASE_URL ?>?page=archive">過去アーカイブを見る</a>
+        </div>
+      </section>
+
+      <div id="topSummary" class="top-summary"></div>
+      <div id="active"></div>
+
+      <div class="layout">
+        <section class="panel">
+          <h2>今日やるタスク</h2>
+          <div id="tasks">読み込み中...</div>
+        </section>
+
+        <div class="stack">
+          <section class="panel">
+            <h2>候補タスク</h2>
+            <div id="candidates">読み込み中...</div>
+          </section>
+
+          <section class="panel">
+            <h2>今日の集計</h2>
+            <div id="analytics">読み込み中...</div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let timerId = null;
+      let currentTaskGroups = [];
+      let currentTaskStats = {};
+      let currentAnalytics = null;
+      let currentActiveSession = null;
+
+      function loadTasks(options = {}) {
+        const { showLoading = true, includeCandidates = true } = options;
+
+        clearError();
+        if (showLoading) {
+          setLoadingState();
+        }
+
+        google.script.run
+          .withSuccessHandler(data => {
+            const dashboard = (data && data.dashboard) || {};
+            currentTaskGroups = dashboard.taskGroups || [];
+            currentTaskStats = buildStatsMapFromTaskGroups(currentTaskGroups);
+            currentAnalytics = dashboard.analytics || null;
+            currentActiveSession = dashboard.activeSession || null;
+
+            renderTasks(currentTaskGroups, currentTaskStats);
+            renderActive(currentActiveSession);
+            renderAnalytics(currentAnalytics);
+            renderTopSummary(currentAnalytics, currentActiveSession);
+
+            if (includeCandidates) {
+              renderCandidates((data && data.candidates) || []);
+            }
+          })
+          .withFailureHandler(error => showError('タスク読み込み', error))
+          .getTodayDashboardPageData();
+      }
+
+      function renderActive(session) {
+        const el = document.getElementById('active');
+        clearRunningTimer();
+        document.getElementById('today').textContent = `日付: ${formatTodayDate()}`;
+
+        if (!session) {
+          el.innerHTML = '';
+          return;
+        }
+
+        el.innerHTML = `
+          <section class="panel" style="margin-bottom: 16px;">
+            <h2>現在の作業中</h2>
+            <div class="task">
+              <div class="task-title">${escapeHtml(session.taskTitle)}</div>
+              <div class="meta">${escapeHtml(session.taskListName)}</div>
+              <div class="meta">開始: ${new Date(session.startAt).toLocaleString()}</div>
+              <div id="elapsed" class="meta" style="margin-top: 8px;">経過時間: ${formatDuration(session.elapsedSeconds)}</div>
+              <p><textarea id="memo" placeholder="メモ"></textarea></p>
+              <div class="task-actions">
+                <button onclick="stop('paused', this)">中断</button>
+                <button onclick="stop('completed', this)">完了</button>
+              </div>
+            </div>
+          </section>
+        `;
+
+        startRunningTimer(session.elapsedSeconds);
+      }
+
+      function renderTasks(groups, statsByTaskKey = {}) {
+        const el = document.getElementById('tasks');
+
+        if (!groups.length) {
+          el.innerHTML = '<p class="meta">今日のタスクはありません。</p>';
+          return;
+        }
+
+        el.innerHTML = groups.map((group, index) => `
+          <details class="group" ${index === 0 ? 'open' : ''}>
+            <summary>
+              <span>${escapeHtml(group.taskListName)}</span>
+              <span class="meta">${group.tasks.length} 件</span>
+            </summary>
+            <div class="group-body">
+              ${group.tasks.map(task => renderTaskCard(task, statsByTaskKey)).join('')}
+            </div>
+          </details>
+        `).join('');
+      }
+
+      function renderTaskCard(task, statsByTaskKey) {
+        const stats = getTaskStats(task, statsByTaskKey);
+
+        return `
+          <div class="task">
+            <div class="task-header">
+              <div>
+                <div class="${statusChipClass(stats.appStatus)} status-chip">${statusLabel(stats.appStatus)}</div>
+                <div class="task-title">${escapeHtml(task.title)}</div>
+              </div>
+              <div class="meta">${stats.todayDurationMinutes || 0} 分</div>
+            </div>
+            <div class="meta" style="margin-top: 8px;">${escapeHtml(task.notes || '')}</div>
+            <div class="meta" style="margin-top: 8px;">本日の作業: ${stats.todayDurationMinutes || 0} 分</div>
+            ${renderMiniBar(stats.todayDurationMinutes || 0, getMaxTaskMinutes(statsByTaskKey))}
+            <div class="task-actions">
+              ${renderTaskAction(serializeTask(task), stats.appStatus)}
+            </div>
+          </div>
+        `;
+      }
+
+      function renderCandidates(groups) {
+        const el = document.getElementById('candidates');
+
+        if (!groups.length) {
+          el.innerHTML = '<p class="meta">候補タスクはありません。</p>';
+          return;
+        }
+
+        el.innerHTML = groups.map((group, index) => `
+          <details class="group" ${index === 0 ? 'open' : ''}>
+            <summary>
+              <span>${escapeHtml(group.taskListName)}</span>
+              <span class="meta">${group.tasks.length} 件</span>
+            </summary>
+            <div class="group-body candidate-list">
+              ${group.tasks.map(task => `
+                <div class="compact-item">
+                  <strong>${escapeHtml(task.title)}</strong>
+                  <div class="meta">${escapeHtml(task.notes || '')}</div>
+                  <div class="meta">期限: ${task.due ? escapeHtml(task.due.slice(0, 10)) : '未設定'}</div>
+                  <div class="task-actions">
+                    <button onclick="markTodayFromSerialized('${serializeTask(task)}')">今日やる</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </details>
+        `).join('');
+      }
+
+      function markTodayFromSerialized(serializedTask) {
+        markToday(deserializeTask(serializedTask));
+      }
+
+      function markToday(task) {
+        google.script.run
+          .withSuccessHandler(() => loadTasks({ showLoading: false }))
+          .withFailureHandler(error => showError('今日やる設定', error))
+          .scheduleTaskForToday(task.taskListId, task.taskId);
+      }
+
+      function startFromSerialized(serializedTask, button) {
+        start(deserializeTask(serializedTask), button);
+      }
+
+      function start(task, button) {
+        setButtonPending(button, true);
+
+        google.script.run
+          .withSuccessHandler(session => {
+            currentActiveSession = session ? {
+              taskListId: session.taskListId,
+              taskListName: session.taskListName,
+              taskId: session.taskId,
+              taskTitle: session.taskTitle,
+              startAt: new Date(session.startAt).toISOString(),
+              elapsedSeconds: 0
+            } : null;
+            renderActive(currentActiveSession);
+            loadTasks({ showLoading: false, includeCandidates: false });
+          })
+          .withFailureHandler(error => {
+            setButtonPending(button, false);
+            showError('作業開始', error);
+          })
+          .startTask(task);
+      }
+
+      function stop(action, button) {
+        const memo = document.getElementById('memo')?.value || '';
+        setButtonPending(button, true);
+
+        google.script.run
+          .withSuccessHandler(() => {
+            currentActiveSession = null;
+            renderActive(null);
+            loadTasks({ showLoading: false, includeCandidates: false });
+          })
+          .withFailureHandler(error => {
+            setButtonPending(button, false);
+            showError('作業終了', error);
+          })
+          .stopTask(action, memo);
+      }
+
+      function renderAnalytics(analytics) {
+        const el = document.getElementById('analytics');
+
+        if (!analytics || !analytics.totalSessions) {
+          el.innerHTML = '<p class="meta">まだ作業ログはありません。</p>';
+          return;
+        }
+
+        el.innerHTML = `
+          <div class="compact-item">
+            <strong>合計 ${analytics.totalMinutes} 分</strong>
+            <div class="meta">記録回数: ${analytics.totalSessions} 回 / 作業中: ${Math.round((analytics.runningSeconds || 0) / 60)} 分</div>
+          </div>
+          <div class="analytics-list" style="margin-top: 10px;">
+            ${analytics.byTaskList.slice(0, 6).map(item => `
+              <div class="compact-item">
+                <strong>${escapeHtml(item.taskListName)}</strong>
+                <div class="meta">${item.totalMinutes} 分</div>
+                ${renderMiniBar(item.totalMinutes, analytics.totalMinutes)}
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function setLoadingState() {
+        document.getElementById('tasks').innerHTML = '読み込み中...';
+        document.getElementById('candidates').innerHTML = '読み込み中...';
+        document.getElementById('analytics').innerHTML = '読み込み中...';
+      }
+
+      function showError(context, error) {
+        const panel = document.getElementById('error');
+        const detail = formatError(error);
+
+        panel.style.display = 'block';
+        panel.textContent = `${context}でエラーが発生しました。\n${detail}`;
+      }
+
+      function clearError() {
+        const panel = document.getElementById('error');
+        panel.style.display = 'none';
+        panel.textContent = '';
+      }
+
+      function formatError(error) {
+        if (!error) return '原因を特定できませんでした。';
+        if (typeof error === 'string') return error;
+        if (error.message && error.stack) return `${error.message}\n${error.stack}`;
+        if (error.message) return error.message;
+
+        try {
+          return JSON.stringify(error, null, 2);
+        } catch (jsonError) {
+          return String(error);
+        }
+      }
+
+      function renderTaskAction(serializedTask, status) {
+        if (status === 'running') {
+          return '<div class="meta">このタスクは現在作業中です。</div>';
+        }
+
+        if (status === 'paused') {
+          return `<button onclick="startFromSerialized('${serializedTask}', this)">再開</button>`;
+        }
+
+        return `<button onclick="startFromSerialized('${serializedTask}', this)">開始</button>`;
+      }
+
+      function statusLabel(status) {
+        if (status === 'running') return '作業中';
+        if (status === 'paused') return '中断中';
+        if (status === 'completed') return '完了';
+        return '未着手';
+      }
+
+      function statusChipClass(status) {
+        if (status === 'running') return 'status-running';
+        if (status === 'paused') return 'status-paused';
+        if (status === 'completed') return 'status-completed';
+        return 'status-not-started';
+      }
+
+      function startRunningTimer(initialSeconds) {
+        const startedAt = Date.now() - (initialSeconds * 1000);
+        const el = document.getElementById('elapsed');
+
+        timerId = setInterval(() => {
+          if (!el) return;
+          const seconds = Math.floor((Date.now() - startedAt) / 1000);
+          el.textContent = `経過時間: ${formatDuration(seconds)}`;
+          if (currentActiveSession) {
+            currentActiveSession.elapsedSeconds = seconds;
+            renderTopSummary(currentAnalytics, currentActiveSession);
+          }
+        }, 1000);
+      }
+
+      function clearRunningTimer() {
+        if (!timerId) return;
+        clearInterval(timerId);
+        timerId = null;
+      }
+
+      function formatDuration(totalSeconds) {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        return [
+          String(hours).padStart(2, '0'),
+          String(minutes).padStart(2, '0'),
+          String(seconds).padStart(2, '0')
+        ].join(':');
+      }
+
+      function formatTodayDate() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      function getTaskKey(task) {
+        return `${task.taskListId}::${task.taskId}`;
+      }
+
+      function getTaskStats(task, statsByTaskKey) {
+        return statsByTaskKey[getTaskKey(task)] || {
+          todayDurationMinutes: 0,
+          appStatus: 'not_started'
+        };
+      }
+
+      function buildStatsMapFromTaskGroups(groups) {
+        const map = {};
+
+        (groups || []).forEach(group => {
+          (group.tasks || []).forEach(task => {
+            map[getTaskKey(task)] = {
+              todayDurationMinutes: Number(task.todayDurationMinutes || 0),
+              todayDurationSeconds: Number(task.todayDurationSeconds || 0),
+              appStatus: task.appStatus || 'not_started'
+            };
+          });
+        });
+
+        return map;
+      }
+
+      function getMaxTaskMinutes(statsByTaskKey) {
+        const values = Object.values(statsByTaskKey || {});
+        const max = values.reduce((currentMax, item) => Math.max(currentMax, Number(item.todayDurationMinutes || 0)), 0);
+        return Math.max(max, 1);
+      }
+
+      function renderMiniBar(value, maxValue) {
+        const safeMax = Math.max(Number(maxValue || 0), 1);
+        const ratio = Math.min(100, Math.round((Number(value || 0) / safeMax) * 100));
+
+        return `
+          <div class="time-bar">
+            <div class="time-bar-fill" style="width: ${ratio}%"></div>
+          </div>
+        `;
+      }
+
+      function renderTopSummary(analytics, activeSession) {
+        const el = document.getElementById('topSummary');
+        const totalMinutes = analytics?.totalMinutes || 0;
+        const runningMinutes = Math.round((activeSession?.elapsedSeconds || 0) / 60);
+        const taskCount = currentTaskGroups.reduce((sum, group) => sum + group.tasks.length, 0);
+
+        el.innerHTML = `
+          <div class="summary-card">
+            <div class="summary-label">今日のタスク数</div>
+            <div class="summary-value">${taskCount}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">今日の作業時間</div>
+            <div class="summary-value">${totalMinutes}<span class="meta"> 分</span></div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">現在の経過時間</div>
+            <div class="summary-value">${runningMinutes}<span class="meta"> 分</span></div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">中断中タスク</div>
+            <div class="summary-value">${countTasksByStatus('paused')}</div>
+          </div>
+        `;
+      }
+
+      function setButtonPending(button, isPending) {
+        if (!button) return;
+
+        if (!button.dataset.label) {
+          button.dataset.label = button.textContent;
+        }
+
+        button.disabled = isPending;
+        button.textContent = isPending ? '処理中...' : button.dataset.label;
+      }
+
+      function countTasksByStatus(status) {
+        return Object.values(currentTaskStats || {}).filter(item => item.appStatus === status).length;
+      }
+
+      function serializeTask(task) {
+        return encodeURIComponent(JSON.stringify(task));
+      }
+
+      function deserializeTask(serializedTask) {
+        return JSON.parse(decodeURIComponent(serializedTask));
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      loadTasks();
+    </script>
+  </body>
+</html>
