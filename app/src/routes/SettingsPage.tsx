@@ -5,6 +5,7 @@ import {
   disconnectGoogle,
   getSettings,
   seedSampleData,
+  setSetting,
 } from "../lib/commands";
 import { useSyncStatus } from "../lib/queries";
 
@@ -16,15 +17,22 @@ export default function SettingsPage() {
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [devMessage, setDevMessage] = useState<string | null>(null);
+  const [closeToTray, setCloseToTray] = useState(true);
 
   useEffect(() => {
     getSettings()
       .then((settings) => {
         setClientId(settings["oauth_client_id"] ?? "");
         setClientSecret(settings["oauth_client_secret"] ?? "");
+        setCloseToTray(settings["close_to_tray"] !== "false");
       })
       .catch(() => {});
   }, []);
+
+  const handleCloseToTray = (checked: boolean) => {
+    setCloseToTray(checked);
+    void setSetting("close_to_tray", checked ? "true" : "false");
+  };
 
   const refresh = () => void queryClient.invalidateQueries();
 
@@ -115,6 +123,19 @@ export default function SettingsPage() {
         )}
 
         {message && <p className="mt-3 text-sm text-sky-300">{message}</p>}
+      </div>
+
+      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+        <h2 className="text-sm font-semibold text-slate-300">動作</h2>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={closeToTray}
+            onChange={(e) => handleCloseToTray(e.target.checked)}
+            className="accent-sky-600"
+          />
+          閉じるボタンでトレイに常駐する (終了はトレイメニューから)
+        </label>
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">

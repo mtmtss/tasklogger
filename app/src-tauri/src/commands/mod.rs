@@ -11,6 +11,20 @@ use crate::state::AppState;
 
 pub type CmdResult<T> = Result<T, String>;
 
+/// フロートウィンドウの表示/非表示を切り替える。戻り値は切替後の表示状態。
+#[tauri::command]
+pub fn toggle_float_window(app: tauri::AppHandle) -> CmdResult<bool> {
+    let window = tauri::Manager::get_webview_window(&app, "float")
+        .ok_or("float window not found")?;
+    let visible = window.is_visible().map_err(|e| e.to_string())?;
+    if visible {
+        window.hide().map_err(|e| e.to_string())?;
+    } else {
+        window.show().map_err(|e| e.to_string())?;
+    }
+    Ok(!visible)
+}
+
 pub fn db_err(e: rusqlite::Error) -> String {
     format!("データベースエラー: {e}")
 }

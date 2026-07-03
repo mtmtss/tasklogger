@@ -95,6 +95,16 @@ pub fn create_active_session(
     Ok(())
 }
 
+/// active_session の last_heartbeat_at (セッションが無ければ None)。
+pub fn get_session_heartbeat(conn: &Connection) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT last_heartbeat_at FROM active_session WHERE id = 1",
+        [],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
 pub fn clear_active_session(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM active_session WHERE id = 1", [])?;
     Ok(())

@@ -40,3 +40,16 @@ export const disconnectGoogle = () => invoke<void>("disconnect_google");
 export const syncNow = () => invoke<void>("sync_now");
 
 export const getSyncStatus = () => invoke<SyncStatus>("get_sync_status");
+
+export interface InterruptedTask {
+  taskListId: string;
+  taskId: string;
+  taskTitle: string;
+}
+
+export const getInterruptedTask = () =>
+  invoke<InterruptedTask | null>("get_interrupted_task");
+
+export const resumeInterrupted = () => invoke<void>("resume_interrupted");
+
+export const dismissInterrupted = () => invoke<void>("dismiss_interrupted");

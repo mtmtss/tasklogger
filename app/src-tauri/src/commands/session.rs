@@ -166,6 +166,38 @@ pub fn complete_task_direct(
     Ok(())
 }
 
+/// スリープ/異常終了で中断されたタスク (復帰ダイアログ表示用, spec §7.2)。
+#[tauri::command]
+pub fn get_interrupted_task(app: tauri::AppHandle) -> CmdResult<Option<crate::power::InterruptedTask>> {
+    Ok(crate::power::load_interrupted(&app))
+}
+
+/// 復帰ダイアログ「再開する」: 中断されていたタスクを再び running にする。
+#[tauri::command]
+pub fn resume_interrupted(app: tauri::AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let interrupted = crate::power::load_interrupted(&app)
+        .ok_or("中断中のタスクが見つかりません。")?;
+
+    let result = start_task(
+        app.clone(),
+        state,
+        TaskRef {
+            task_list_id: interrupted.task_list_id,
+            task_id: interrupted.task_id,
+        },
+    );
+    // 成否に関わらずダイアログは閉じる (タスクがリモートで消えていた場合など)
+    crate::power::clear_interrupted(&app);
+    result
+}
+
+/// 復帰ダイアログ「今はしない」: 中断のまま今日リストに残す。
+#[tauri::command]
+pub fn dismiss_interrupted(app: tauri::AppHandle) -> CmdResult<()> {
+    crate::power::clear_interrupted(&app);
+    Ok(())
+}
+
 /// 今すぐやる (spec §5.3): due=today 化 + 即開始。別タスク running 中はブロック。
 #[tauri::command]
 pub fn do_it_now(

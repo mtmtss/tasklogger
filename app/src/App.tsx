@@ -3,6 +3,7 @@ import TodayPage from "./routes/TodayPage";
 import ArchivePage from "./routes/ArchivePage";
 import SettingsPage from "./routes/SettingsPage";
 import { useTauriEvents } from "./lib/queries";
+import ResumeDialog from "./components/ResumeDialog";
 
 const navItems = [
   { to: "/today", label: "今日" },
@@ -15,6 +16,7 @@ export default function App() {
   return (
     <HashRouter>
       <div className="min-h-screen bg-slate-950 text-slate-100">
+        <ResumeDialog />
         <nav className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-800 bg-slate-950/90 px-4 py-2 backdrop-blur">
           <span className="mr-4 text-sm font-bold tracking-wide text-sky-400">
             TaskLogger

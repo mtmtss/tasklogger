@@ -2,33 +2,24 @@ mod commands;
 mod db;
 mod domain;
 mod google;
+mod platform;
+mod power;
 mod state;
+mod tray;
+
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
-use tauri::Manager;
+use tauri::{Manager, PhysicalPosition};
 
 use db::repos;
 use domain::time;
 use state::AppState;
 
-/// フロートウィンドウの表示/非表示を切り替える。戻り値は切替後の表示状態。
-#[tauri::command]
-fn toggle_float_window(app: tauri::AppHandle) -> Result<bool, String> {
-    let window = app
-        .get_webview_window("float")
-        .ok_or("float window not found")?;
-    let visible = window.is_visible().map_err(|e| e.to_string())?;
-    if visible {
-        window.hide().map_err(|e| e.to_string())?;
-    } else {
-        window.show().map_err(|e| e.to_string())?;
-    }
-    Ok(!visible)
-}
-
-/// 起動時回復 (spec §7.3): active_session が残っていたら
-/// end_time=last_heartbeat_at で recovery ログを書いてセッションを消す。
-/// 再開ダイアログの表示は M3 (sleep_interrupted_task 設定だけ先に残す)。
+/// 起動時回復 (spec §7.3): active_session が残っていたら (= 前回異常終了)
+/// end_time=last_heartbeat_at で recovery ログを書いてセッションを消し、
+/// 復帰ダイアログの対象として記録する。
 fn recover_orphan_session(conn: &Connection) {
     let session = match conn.query_row(
         "SELECT task_list_id, task_list_name, task_id, task_title, start_at, last_heartbeat_at
@@ -75,7 +66,7 @@ fn recover_orphan_session(conn: &Connection) {
     let _ = repos::clear_active_session(conn);
     let _ = repos::set_setting(
         conn,
-        "sleep_interrupted_task",
+        power::INTERRUPTED_KEY,
         &serde_json::json!({
             "taskListId": task_list_id,
             "taskId": task_id,
@@ -85,17 +76,52 @@ fn recover_orphan_session(conn: &Connection) {
     );
 }
 
-/// running 中は 30 秒毎に last_heartbeat_at を更新する (spec §7.1 二次検知の下地)。
-fn spawn_heartbeat(app: tauri::AppHandle) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(30));
+/// フロート窓の保存位置を復元する。
+fn restore_float_position(app: &tauri::AppHandle) {
+    let position = {
         let state = app.state::<AppState>();
         let conn = state.db.lock().unwrap();
-        let _ = conn.execute(
-            "UPDATE active_session SET last_heartbeat_at = ?1 WHERE id = 1",
-            rusqlite::params![time::to_iso(&time::now_utc())],
-        );
-    });
+        repos::get_setting(&conn, "float_window_position")
+            .ok()
+            .flatten()
+    };
+    if let Some(text) = position {
+        if let Some((x, y)) = text.split_once(',') {
+            if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
+                if let Some(window) = app.get_webview_window("float") {
+                    let _ = window.set_position(PhysicalPosition::new(x, y));
+                }
+            }
+        }
+    }
+}
+
+static LAST_FLOAT_SAVE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// フロート窓の移動を settings に保存 (ドラッグ中の連続イベントは 500ms 間隔に間引く)。
+fn save_float_position(app: &tauri::AppHandle, x: i32, y: i32) {
+    {
+        let mut last = LAST_FLOAT_SAVE.lock().unwrap();
+        if let Some(t) = *last {
+            if t.elapsed() < Duration::from_millis(500) {
+                return;
+            }
+        }
+        *last = Some(Instant::now());
+    }
+    let state = app.state::<AppState>();
+    let conn = state.db.lock().unwrap();
+    let _ = repos::set_setting(&conn, "float_window_position", &format!("{x},{y}"));
+}
+
+fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let conn = state.db.lock().unwrap();
+    repos::get_setting(&conn, "close_to_tray")
+        .ok()
+        .flatten()
+        .map(|v| v != "false")
+        .unwrap_or(true)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -103,28 +129,46 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 二重起動時は既存のメインウィンドウを前面に出す (spec §10)
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let conn = db::open(&data_dir.join("tasklogger.db"))?;
             recover_orphan_session(&conn);
             app.manage(AppState::new(conn));
-            spawn_heartbeat(app.handle().clone());
+
+            power::spawn_heartbeat(app.handle().clone());
+            platform::start_power_monitor(app.handle().clone());
             google::init(app.handle());
+            tray::setup(app.handle())?;
+            restore_float_position(app.handle());
             Ok(())
         })
+        .on_window_event(|window, event| match event {
+            // メイン窓の「閉じる」はトレイ常駐 (設定で無効化可, spec §8.2)
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                if close_to_tray_enabled(window.app_handle()) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            tauri::WindowEvent::Moved(position) if window.label() == "float" => {
+                save_float_position(window.app_handle(), position.x, position.y);
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
-            toggle_float_window,
+            commands::toggle_float_window,
             commands::session::start_task,
             commands::session::stop_task,
             commands::session::complete_task_direct,
             commands::session::do_it_now,
+            commands::session::get_interrupted_task,
+            commands::session::resume_interrupted,
+            commands::session::dismiss_interrupted,
             commands::dashboard::get_today_dashboard,
             commands::dashboard::get_candidates,
             commands::settings::get_settings,
