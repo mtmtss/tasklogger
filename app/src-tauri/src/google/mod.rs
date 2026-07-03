@@ -126,10 +126,12 @@ pub async fn connect_google(
 
     let id = client_id.trim().to_string();
     let secret = client_secret.trim().to_string();
-    let (token_set, refresh_token) =
-        tauri::async_runtime::spawn_blocking(move || auth::run_authorization_flow(&id, &secret))
-            .await
-            .map_err(|e| format!("認証処理に失敗しました: {e}"))??;
+    let handle = app.clone();
+    let (token_set, refresh_token) = tauri::async_runtime::spawn_blocking(move || {
+        auth::run_authorization_flow(&handle, &id, &secret)
+    })
+    .await
+    .map_err(|e| format!("認証処理に失敗しました: {e}"))??;
 
     auth::save_refresh_token(&refresh_token)?;
     {

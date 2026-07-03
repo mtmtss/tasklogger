@@ -54,6 +54,7 @@ pub fn delete_refresh_token() {
 
 /// 認可フロー全体を実行し、(TokenSet, refresh_token) を返す。ブロッキング。
 pub fn run_authorization_flow(
+    app: &tauri::AppHandle,
     client_id: &str,
     client_secret: &str,
 ) -> Result<(TokenSet, String), String> {
@@ -92,7 +93,14 @@ pub fn run_authorization_flow(
     );
 
     // 既定ブラウザで認可画面を開く
-    opener_open(&auth_url)?;
+    // 注意: cmd /C start 方式は URL 中の & がコマンド区切りと解釈され
+    // パラメータが欠落するため、opener プラグインを使う
+    {
+        use tauri_plugin_opener::OpenerExt;
+        app.opener()
+            .open_url(&auth_url, None::<&str>)
+            .map_err(|e| format!("ブラウザを開けませんでした: {e}"))?;
+    }
 
     // ブラウザからのリダイレクトを 1 回だけ受ける (タイムアウト 180 秒)
     listener
@@ -222,15 +230,6 @@ fn accept_authorization_code(listener: &TcpListener, expected_state: &str) -> Re
         return Err("state が一致しません。認証をやり直してください。".into());
     }
     code.ok_or("認可コードが取得できませんでした。".into())
-}
-
-fn opener_open(url: &str) -> Result<(), String> {
-    // Windows: 既定ブラウザで開く
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("ブラウザを開けませんでした: {e}"))
 }
 
 fn http_post_form(url: &str, params: &[(&str, &str)]) -> Result<String, String> {
