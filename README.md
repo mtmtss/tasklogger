@@ -38,8 +38,8 @@ GAS 版の設計思想(Google Tasks をタスクの源泉とし、開始→中�
 
 - [x] M0: 仕様書作成
 - [x] M0: `app/` scaffold
-- [ ] M1: ローカルコア(SQLite・状態機械・今日リスト・開始/中断/完了)
-- [ ] M2: Google Tasks 連携(OAuth・pull/push 同期・今すぐやる)
+- [x] M1: ローカルコア(SQLite・状態機械・今日リスト・開始/中断/完了)
+- [x] M2: Google Tasks 連携(OAuth・pull/push 同期・今すぐやる)
 - [ ] M3: スリープ検知・起動時回復・フロートウィンドウ・トレイ
 - [ ] M4: アーカイブ分析・CSV エクスポート・GAS データインポート
 - [ ] M5: 磨き込み・インストーラ

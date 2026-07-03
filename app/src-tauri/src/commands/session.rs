@@ -92,7 +92,8 @@ pub fn stop_task(
                 "complete_task",
                 &session.task_list_id,
                 &session.task_id,
-                "{}",
+                &serde_json::json!({"status": "completed", "completed": time::to_iso(&end)})
+                    .to_string(),
             )
             .map_err(db_err)?;
         }
@@ -148,8 +149,15 @@ pub fn complete_task_direct(
         )
         .map_err(db_err)?;
         repos::mark_task_completed_locally(&tx, &row.task_list_id, &row.id).map_err(db_err)?;
-        repos::enqueue_sync_op(&tx, "complete_task", &row.task_list_id, &row.id, "{}")
-            .map_err(db_err)?;
+        repos::enqueue_sync_op(
+            &tx,
+            "complete_task",
+            &row.task_list_id,
+            &row.id,
+            &serde_json::json!({"status": "completed", "completed": time::to_iso(&time::now_utc())})
+                .to_string(),
+        )
+        .map_err(db_err)?;
         tx.commit().map_err(db_err)?;
     }
 
@@ -178,8 +186,14 @@ pub fn do_it_now(
 
         let tx = conn.unchecked_transaction().map_err(db_err)?;
         repos::set_task_due_today_locally(&tx, &row.task_list_id, &row.id).map_err(db_err)?;
-        repos::enqueue_sync_op(&tx, "set_due_today", &row.task_list_id, &row.id, "{}")
-            .map_err(db_err)?;
+        repos::enqueue_sync_op(
+            &tx,
+            "set_due_today",
+            &row.task_list_id,
+            &row.id,
+            &serde_json::json!({"due": time::today_due_value()}).to_string(),
+        )
+        .map_err(db_err)?;
         repos::create_active_session(
             &tx,
             &row.task_list_id,

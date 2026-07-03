@@ -116,7 +116,7 @@ pub fn run() {
             recover_orphan_session(&conn);
             app.manage(AppState::new(conn));
             spawn_heartbeat(app.handle().clone());
-            google::start_sync_worker(app.handle().clone());
+            google::init(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -130,6 +130,10 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_setting,
             commands::settings::seed_sample_data,
+            google::connect_google,
+            google::disconnect_google,
+            google::sync_now,
+            google::get_sync_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

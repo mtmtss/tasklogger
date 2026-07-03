@@ -11,6 +11,7 @@ import { useCandidates, useDashboard } from "../lib/queries";
 import { formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
 import RunningPanel from "../components/RunningPanel";
+import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
 
 export default function TodayPage() {
@@ -52,12 +53,15 @@ export default function TodayPage() {
             {data?.dateText}
           </span>
         </h1>
-        <button
-          onClick={() => void toggleFloatWindow()}
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-        >
-          フロート表示切替
-        </button>
+        <div className="flex items-center gap-3">
+          <SyncBadge onError={setError} />
+          <button
+            onClick={() => void toggleFloatWindow()}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            フロート表示切替
+          </button>
+        </div>
       </div>
 
       {error && (

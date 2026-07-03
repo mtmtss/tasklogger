@@ -25,3 +25,18 @@ export const setSetting = (key: string, value: string) =>
 export const seedSampleData = () => invoke<void>("seed_sample_data");
 
 export const toggleFloatWindow = () => invoke<boolean>("toggle_float_window");
+
+export interface SyncStatus {
+  connected: boolean;
+  lastPullAt: string | null;
+  queueCount: number;
+}
+
+export const connectGoogle = (clientId: string, clientSecret: string) =>
+  invoke<void>("connect_google", { clientId, clientSecret });
+
+export const disconnectGoogle = () => invoke<void>("disconnect_google");
+
+export const syncNow = () => invoke<void>("sync_now");
+
+export const getSyncStatus = () => invoke<SyncStatus>("get_sync_status");
