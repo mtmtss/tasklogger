@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* フロートウィンドウ (transparent) のため背景は各画面のルート要素で塗る */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
