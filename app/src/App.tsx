@@ -2,6 +2,7 @@ import { HashRouter, NavLink, Navigate, Route, Routes } from "react-router";
 import TodayPage from "./routes/TodayPage";
 import ArchivePage from "./routes/ArchivePage";
 import SettingsPage from "./routes/SettingsPage";
+import { useTauriEvents } from "./lib/queries";
 
 const navItems = [
   { to: "/today", label: "今日" },
@@ -10,6 +11,7 @@ const navItems = [
 ];
 
 export default function App() {
+  useTauriEvents();
   return (
     <HashRouter>
       <div className="min-h-screen bg-slate-950 text-slate-100">
