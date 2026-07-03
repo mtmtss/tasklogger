@@ -18,7 +18,7 @@ tasklogger/
 | ディレクトリ | 状態 | 内容 |
 | --- | --- | --- |
 | [docs/specification.md](docs/specification.md) | **最新** | Tauri 版の仕様書。設計思想・データモデル・状態遷移・同期設計・実装マイルストーンを定義 |
-| `app/` | 未着手(M0 で scaffold 予定) | Tauri 2.x + React + TypeScript のデスクトップアプリ |
+| `app/` | scaffold 済み(M1 実装中) | Tauri 2.x + React + TypeScript のデスクトップアプリ |
 | `apps_script/` | 凍結 | 旧 GAS 版のソースと仕様([apps_script/specification.txt](apps_script/specification.txt))。新規セットアップは非推奨 |
 
 ## Tauri 版の概要
@@ -37,7 +37,7 @@ GAS 版の設計思想(Google Tasks をタスクの源泉とし、開始→中�
 ### 実装状況(マイルストーン)
 
 - [x] M0: 仕様書作成
-- [ ] M0: `app/` scaffold
+- [x] M0: `app/` scaffold
 - [ ] M1: ローカルコア(SQLite・状態機械・今日リスト・開始/中断/完了)
 - [ ] M2: Google Tasks 連携(OAuth・pull/push 同期・今すぐやる)
 - [ ] M3: スリープ検知・起動時回復・フロートウィンドウ・トレイ
