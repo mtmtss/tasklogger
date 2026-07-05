@@ -71,7 +71,17 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
             .collect()
     };
 
+    let mut last_error: Option<String> = None;
+
     for row in rows {
+        // ローカル専用のサンプルデータ (spec: id LIKE 'sample-%') はリモートに存在しないため
+        // API を呼ばずに破棄する (400 Bad Request で無限リトライになるのを防ぐ)。
+        if row.task_list_id.starts_with("sample-") || row.task_id.starts_with("sample-") {
+            let conn = state.db.lock().unwrap();
+            let _ = conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![row.id]);
+            continue;
+        }
+
         match tasks_api::patch_task(token, &row.task_list_id, &row.task_id, &row.payload) {
             Ok(()) => {
                 let conn = state.db.lock().unwrap();
@@ -104,18 +114,24 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
                 }
             }
             Err(err) => {
-                // ネットワーク/一時エラー → attempts を上げて次サイクルで再試行
+                // ネットワーク/一時エラー → attempts を上げて次サイクルで再試行。
+                // このタスクを飛ばして残りの行は処理を続ける (1 件の恒久エラーで
+                // キュー全体が詰まらないように spec §6.3 を強化)。
                 let message = err.to_string();
                 let conn = state.db.lock().unwrap();
                 let _ = conn.execute(
                     "UPDATE sync_queue SET attempts = attempts + 1, last_error = ?2 WHERE id = ?1",
                     params![row.id, message],
                 );
-                return Err(message);
+                last_error = Some(message);
             }
         }
     }
-    Ok(())
+
+    match last_error {
+        Some(message) => Err(message),
+        None => Ok(()),
+    }
 }
 
 fn pull_tasks(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
