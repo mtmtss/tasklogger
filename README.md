@@ -42,7 +42,9 @@ GAS 版の設計思想(Google Tasks をタスクの源泉とし、開始→中�
 - [x] M2: Google Tasks 連携(OAuth・pull/push 同期・今すぐやる)
 - [x] M3: スリープ検知・起動時回復・フロートウィンドウ・トレイ
 - [x] M4: アーカイブ分析・CSV エクスポート・GAS データインポート
-- [ ] M5: 磨き込み・インストーラ
+- [x] M5: 磨き込み・インストーラ
+
+すべてのマイルストーンが完了しています。インストーラは `app/` で `npm run tauri build` を実行すると `app/src-tauri/target/release/bundle/` に生成されます (NSIS `*-setup.exe` / MSI)。
 
 ---
 
