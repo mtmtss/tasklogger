@@ -3,11 +3,15 @@
 
 #[cfg(windows)]
 mod win_power;
+#[cfg(target_os = "macos")]
+mod mac_power;
 
 pub fn start_power_monitor(app: tauri::AppHandle) {
     #[cfg(windows)]
     win_power::start(app);
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    mac_power::start(app);
+    #[cfg(not(any(windows, target_os = "macos")))]
     let _ = app;
 }
 
@@ -17,7 +21,11 @@ pub fn idle_seconds() -> Option<i64> {
     {
         win_power::idle_seconds()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        mac_power::idle_seconds()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         None
     }
