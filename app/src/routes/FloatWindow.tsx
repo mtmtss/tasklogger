@@ -55,18 +55,17 @@ export default function FloatWindow() {
           </div>
         </>
       ) : (
-        <>
-          <span data-tauri-drag-region className="flex-1 text-sm text-slate-500">
-            作業中タスクなし
-          </span>
-          <button
-            onClick={() => void getCurrentWindow().hide()}
-            className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
-          >
-            閉じる
-          </button>
-        </>
+        <span data-tauri-drag-region className="flex-1 text-sm text-slate-500">
+          作業中タスクなし
+        </span>
       )}
+      <button
+        onClick={() => void getCurrentWindow().hide()}
+        title="閉じる"
+        className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400 hover:bg-slate-800"
+      >
+        閉じる
+      </button>
     </div>
   );
 }
