@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [devMessage, setDevMessage] = useState<string | null>(null);
   const [closeToTray, setCloseToTray] = useState(true);
+  const [idleMinutes, setIdleMinutes] = useState("5");
 
   useEffect(() => {
     getSettings()
@@ -25,6 +26,7 @@ export default function SettingsPage() {
         setClientId(settings["oauth_client_id"] ?? "");
         setClientSecret(settings["oauth_client_secret"] ?? "");
         setCloseToTray(settings["close_to_tray"] !== "false");
+        setIdleMinutes(settings["idle_pause_minutes"] ?? "5");
       })
       .catch(() => {});
   }, []);
@@ -32,6 +34,13 @@ export default function SettingsPage() {
   const handleCloseToTray = (checked: boolean) => {
     setCloseToTray(checked);
     void setSetting("close_to_tray", checked ? "true" : "false");
+  };
+
+  const handleIdleMinutes = (value: string) => {
+    setIdleMinutes(value);
+    if (/^\d+$/.test(value.trim())) {
+      void setSetting("idle_pause_minutes", value.trim());
+    }
   };
 
   const refresh = () => void queryClient.invalidateQueries();
@@ -136,6 +145,21 @@ export default function SettingsPage() {
           />
           閉じるボタンでトレイに常駐する (終了はトレイメニューから)
         </label>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+          無操作が
+          <input
+            type="number"
+            min="0"
+            value={idleMinutes}
+            onChange={(e) => handleIdleMinutes(e.target.value)}
+            className="w-16 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-center text-sm focus:border-sky-600 focus:outline-none"
+          />
+          分続いたら実行中タスクを自動で中断する (0 で無効)
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          スリープ・画面ロック・スクリーンセーバ・離席をまとめて検知します。
+          中断ログは最後に操作した時刻で締められます。
+        </p>
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">

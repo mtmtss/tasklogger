@@ -11,6 +11,7 @@ const ALLOWED_KEYS: &[&str] = &[
     "float_window_position",
     "autostart",
     "close_to_tray",
+    "idle_pause_minutes",
     "user_email",
     "oauth_client_id",
     "oauth_client_secret",

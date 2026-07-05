@@ -113,8 +113,9 @@ CREATE TABLE work_logs (
   created_at       TEXT NOT NULL,
   -- 拡張カラム (Tauri 版で追加)
   end_reason       TEXT NOT NULL DEFAULT 'user',
-                   -- 'user'            : ユーザーのボタン操作
+                   -- 'user'            : ユーザーのボタン操作 (手動終了時の中断含む)
                    -- 'sleep'           : PC スリープによる自動中断
+                   -- 'idle'            : 無操作 (ロック/スクリーンセーバ/離席) による自動中断
                    -- 'recovery'        : 異常終了からの起動時回復
                    -- 'direct_complete' : 中断中/未開始からの直接完了 (duration=0)
   source           TEXT NOT NULL DEFAULT 'app'   -- 'app' | 'import_gas'
@@ -211,6 +212,7 @@ Google 側で完了済み(`status='completed'`)のタスクは今日リストに
 | 5 | **paused / not_started** | **完了(直接完了・新)** | completed | `completed` 行、start=end=now、**duration=0**、end_reason='direct_complete' | `complete_task` を enqueue |
 | 6 | 候補タスク | **今すぐやる(新)** | running | なし(セッション作成) | due=today をローカル更新(dirty=1)+ `set_due_today` を enqueue |
 | 7 | running | **PC スリープ(新)** | paused | `paused` 行、end_time=スリープ時刻、end_reason='sleep' | なし |
+| 7b | running | **無操作しきい値超過(新)** ロック/スクリーンセーバ/離席 | paused | `paused` 行、end_time=最終入力時刻、end_reason='idle' | なし |
 | 8 | running | アプリ終了(確認ダイアログで中断を選択) | paused | `paused` 行 | なし |
 | 9 | running | クラッシュ / スリープ中の終了 → 次回起動 | paused | `paused` 行、end_time=last_heartbeat_at、end_reason='recovery' | なし |
 | 10 | completed | (終端) | — | — | — |
@@ -334,26 +336,39 @@ Google 側で完了済み(`status='completed'`)のタスクは今日リストに
 
 ---
 
-# 7. スリープ・復帰・異常終了時の動作(新機能 3)
+# 7. 無操作・スリープ・異常終了時の動作(新機能 3)
 
-## 7.1 スリープ検知(Windows)
+## 7.1 無操作検知(主検知、Windows)
 
-- **一次検知**: `PowerRegisterSuspendResumeNotification`(powrprof、DEVICE_NOTIFY_CALLBACK)を `windows` crate で登録
+**「一定時間 PC の操作がない」ことを中断のトリガーとする。** スリープ・画面ロック・スクリーンセーバ・離席を単一の仕組みでカバーする。
+
+- `GetLastInputInfo`(user32)で最後のキーボード/マウス入力からの経過秒をハートビートループ(15 秒毎)で監視する
+- running セッションがあり、無操作時間が **しきい値(設定 `idle_pause_minutes`、デフォルト 5 分、0 で無効)** を超えたら自動中断:
+  - `paused` ログ追記。**end_time = 最後に入力があった時刻**(無操作分を作業時間に含めない)、end_reason='idle'
+  - `sleep_interrupted_task` にタスク情報を記録し、セッション削除
+- `GetTickCount` はスリープ中も進むため、スリープを挟いだ無操作も正しく計測される
+- ユーザーの入力が再開した時点(無操作時間がしきい値超 → リセット)で §7.2 の再開ダイアログを表示する
+
+## 7.1b スリープ即時検知(補助)
+
+- `PowerRegisterSuspendResumeNotification`(powrprof、DEVICE_NOTIFY_CALLBACK、手書き FFI)を登録
   - コールバック型でメッセージループ不要、**Modern Standby(S0 low-power idle)でも通知される**
-  - `PBT_APMSUSPEND`(スリープ突入)、`PBT_APMRESUMEAUTOMATIC` / `PBT_APMRESUMESUSPEND`(復帰)を受信
-- **二次(保険)**: ハートビート方式。running 中は 30 秒毎に `active_session.last_heartbeat_at` を更新し、毎 tick で前回 tick との壁時計差が 90 秒を超えていたら「検知漏れスリープ」とみなして同処理を行う(通知取りこぼし・強制休止・ハイバネートも吸収。この場合の中断時刻は最大 30 秒粗くなる)
-- OS 依存部は `trait PowerMonitor` で抽象化し `platform/windows.rs` に隔離(将来 macOS は NSWorkspace 通知で実装)
+  - `PBT_APMSUSPEND`(スリープ突入)で即時中断(end_reason='sleep')、`PBT_APMRESUMEAUTOMATIC` / `PBT_APMRESUMESUSPEND` で復帰処理
+  - 操作中に明示的にスリープさせた場合など、無操作しきい値を待たず正確なスリープ時刻で締められる
+- **競合対策**: suspend コールバックの処理が suspend 前に完了しなかった場合、復帰処理の冒頭で「セッションが残っていてハートビートが 90 秒超古い」ことを検出し、ハートビート時刻で締める
+- **二次(保険)**: ハートビートの壁時計ギャップ > 90 秒を「検知漏れスリープ」とみなして同処理(通知取りこぼし・強制休止・ハイバネートも吸収)
+- OS 依存部は `platform/` に隔離(将来 macOS 対応時はここに実装を追加)
 
 ## 7.2 イベントフロー
 
 ```text
-[スリープ突入]
+[無操作しきい値超過 / スリープ突入]
   running セッションあり?
-    yes → `paused` ログ追記 (end_time=スリープ時刻, end_reason='sleep')
+    yes → `paused` ログ追記 (end_time=最終入力時刻 or スリープ時刻, end_reason='idle' | 'sleep')
         → settings.sleep_interrupted_task にタスク情報を記録
         → セッション削除
 
-[復帰]
+[入力再開 / スリープ復帰]
   → pull 同期をトリガ
   → sleep_interrupted_task があれば全ウィンドウへ `power-resumed` イベント
   → メインウィンドウにダイアログ表示:

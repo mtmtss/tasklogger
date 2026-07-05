@@ -10,3 +10,15 @@ pub fn start_power_monitor(app: tauri::AppHandle) {
     #[cfg(not(windows))]
     let _ = app;
 }
+
+/// 最後のユーザー入力からの経過秒。取得できない環境では None (無操作検知は無効になる)。
+pub fn idle_seconds() -> Option<i64> {
+    #[cfg(windows)]
+    {
+        win_power::idle_seconds()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}

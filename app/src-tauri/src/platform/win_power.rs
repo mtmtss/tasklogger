@@ -27,6 +27,39 @@ extern "system" {
     ) -> u32;
 }
 
+#[repr(C)]
+struct LastInputInfo {
+    cb_size: u32,
+    dw_time: u32,
+}
+
+#[link(name = "user32")]
+extern "system" {
+    fn GetLastInputInfo(plii: *mut LastInputInfo) -> i32;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetTickCount() -> u32;
+}
+
+/// 最後のキーボード/マウス入力からの経過秒 (spec §7.1 無操作検知)。
+/// GetTickCount はスリープ中も進むため、スリープを挟んだ無操作も正しく計測できる。
+pub fn idle_seconds() -> Option<i64> {
+    unsafe {
+        let mut info = LastInputInfo {
+            cb_size: std::mem::size_of::<LastInputInfo>() as u32,
+            dw_time: 0,
+        };
+        if GetLastInputInfo(&mut info) == 0 {
+            return None;
+        }
+        // tick は 49.7 日で一周するため wrapping_sub
+        let idle_ms = GetTickCount().wrapping_sub(info.dw_time);
+        Some((idle_ms / 1000) as i64)
+    }
+}
+
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 unsafe extern "system" fn power_callback(
@@ -48,6 +81,16 @@ unsafe extern "system" fn power_callback(
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn idle_seconds_returns_a_value_on_windows() {
+        let idle = super::idle_seconds();
+        assert!(idle.is_some(), "GetLastInputInfo FFI が失敗");
+        assert!(idle.unwrap() >= 0);
+    }
 }
 
 pub fn start(app: tauri::AppHandle) {
