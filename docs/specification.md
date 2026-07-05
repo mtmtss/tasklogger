@@ -334,6 +334,21 @@ Google 側で完了済み(`status='completed'`)のタスクは今日リストに
 - Rust 側が `session-changed` / `tasks-changed` イベントを全ウィンドウへ emit し、フロントは TanStack Query の invalidate と Zustand store 更新で反映
 - 同期は絶対に UI 操作をブロックしない
 
+## 6.6 作業ログの Sheets 同期(複数デバイス統合)
+
+複数 PC の作業ログを 1 つの Google スプレッドシートに合流させ、各 PC のアーカイブで統合集計を見られるようにする。
+
+- **正本は引き続き各 PC のローカル SQLite**。Sheets は append-only の合流点であり、集計は常にローカル DB から計算する(UI 速度に影響しない)
+- 同期は既存の 5 分周期ワーカーの 1 ステップとして実行(タスク同期の成否とは独立)。全処理がバックグラウンドスレッドで、UI 操作を一切ブロックしない
+- **シート形式**: `WorkLogs` シート、GAS 版 v2 と同じ 14 列 + `endReason` / `source` の拡張 2 列。GAS 版の既存スプレッドシートの ID を指定すればそのまま合流できる(拡張 2 列のヘッダは自動追加、既存データ行は変更しない)
+- **差分同期(logId ベース)**:
+  - Pull: シートにあってローカルにない行を取込(`INSERT OR IGNORE`、`source='sheet_pull'`)
+  - Push: ローカルにあってシートにない行を `values.append` で追記
+  - logId が一意キーのため、どのデバイスから何度実行しても重複しない(冪等)
+- **設定**: `sheet_sync_enabled`(既定 false)/ `log_spreadsheet_id`(空欄なら「TaskLogger Logs」を自動作成して保存)/ `last_sheet_sync_at`
+- **OAuth スコープ**: `auth/tasks` に加えて `auth/spreadsheets` が必要。スコープ追加後は再接続(再同意)が必要
+- 旧 legacy スキーマ(12 列)のシートは列位置が異なるため同期先として拒否し、CSV インポートを案内する
+
 ---
 
 # 7. 無操作・スリープ・異常終了時の動作(新機能 3)
@@ -536,7 +551,7 @@ tasklogger/
 
 # 12. 将来拡張
 
-- Google Sheets への作業ログ同期(バックアップ / 共有用)
+- ~~Google Sheets への作業ログ同期~~ → **実装済み (§6.6)**
 - アプリ内でのタスク作成・編集(現状タスク作成は Google Tasks 側で行う)
 - macOS 対応(PowerMonitor trait の実装追加)
 - ポモドーロタイマー / タスクごとの予定時間と実績比較

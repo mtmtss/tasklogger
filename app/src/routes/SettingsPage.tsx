@@ -189,6 +189,8 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <SheetSyncSection connected={connected} />
+
       <DataSection />
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
@@ -209,6 +211,89 @@ export default function SettingsPage() {
         {devMessage && <p className="mt-2 text-sm text-sky-300">{devMessage}</p>}
       </div>
     </section>
+  );
+}
+
+/** 作業ログの Google Sheets 同期 (spec §6.6)。複数デバイスのログを合流させる。 */
+function SheetSyncSection({ connected }: { connected: boolean }) {
+  const [enabled, setEnabled] = useState(false);
+  const [spreadsheetId, setSpreadsheetId] = useState("");
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSettings()
+      .then((settings) => {
+        setEnabled(settings["sheet_sync_enabled"] === "true");
+        setSpreadsheetId(settings["log_spreadsheet_id"] ?? "");
+        setLastSyncAt(settings["last_sheet_sync_at"] ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggle = (checked: boolean) => {
+    setEnabled(checked);
+    setMessage(
+      checked
+        ? "次回の同期サイクルから有効になります。初回は Google 接続のやり直し (権限追加) が必要な場合があります。"
+        : "無効にしました。",
+    );
+    void setSetting("sheet_sync_enabled", checked ? "true" : "false");
+  };
+
+  const handleSpreadsheetId = (value: string) => {
+    setSpreadsheetId(value);
+    void setSetting("log_spreadsheet_id", value.trim());
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <h2 className="text-sm font-semibold text-slate-300">
+        作業ログの Sheets 同期 (複数デバイス統合)
+      </h2>
+      <p className="mt-1 text-sm text-slate-500">
+        作業ログを Google スプレッドシートと双方向同期し、複数の PC
+        の記録を統合します。同期はバックグラウンドで行われ、操作の速度には影響しません。
+      </p>
+
+      <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => handleToggle(e.target.checked)}
+          disabled={!connected}
+          className="accent-sky-600"
+        />
+        Sheets 同期を有効にする
+        {!connected && (
+          <span className="text-xs text-slate-500">(先に Google と接続してください)</span>
+        )}
+      </label>
+
+      {enabled && (
+        <div className="mt-3 space-y-2">
+          <input
+            value={spreadsheetId}
+            onChange={(e) => handleSpreadsheetId(e.target.value)}
+            placeholder="スプレッドシート ID (空欄なら自動作成。GAS 版の ID も指定可)"
+            className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 focus:border-sky-600 focus:outline-none"
+          />
+          <p className="text-xs text-slate-500">
+            {spreadsheetId
+              ? `同期先: ${spreadsheetId}`
+              : "空欄のまま同期すると「TaskLogger Logs」を自動作成し、ここに ID が入ります。"}
+            {lastSyncAt &&
+              ` ・ 最終同期: ${new Date(lastSyncAt).toLocaleString("ja-JP")}`}
+          </p>
+          <p className="text-xs text-slate-500">
+            GAS 版の Spreadsheet ID を指定すると、過去ログとそのまま合流できます
+            (旧データも自動で取り込まれます)。
+          </p>
+        </div>
+      )}
+
+      {message && <p className="mt-2 text-sm text-sky-300">{message}</p>}
+    </div>
   );
 }
 

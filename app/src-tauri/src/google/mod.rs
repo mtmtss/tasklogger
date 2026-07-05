@@ -2,6 +2,8 @@
 //! ローカルファースト: UI 操作は SQLite で完結し、ここは裏で pull/push するだけ。
 
 pub mod auth;
+pub mod sheets_api;
+pub mod sheets_sync;
 pub mod sync;
 pub mod tasks_api;
 

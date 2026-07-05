@@ -15,6 +15,9 @@ const ALLOWED_KEYS: &[&str] = &[
     "user_email",
     "oauth_client_id",
     "oauth_client_secret",
+    "sheet_sync_enabled",
+    "log_spreadsheet_id",
+    "last_sheet_sync_at",
 ];
 
 #[tauri::command]

@@ -34,11 +34,28 @@ pub fn perform_sync(app: &tauri::AppHandle) -> Result<(), String> {
     let push_result = push_queue(app, &token);
     let pull_result = pull_tasks(app, &token);
 
+    // 作業ログの Sheets 同期 (spec §6.6)。タスク同期の成否とは独立に実行する
+    let sheets_result = if sheet_sync_enabled(app) {
+        super::sheets_sync::perform_sheet_sync(app, &token)
+    } else {
+        Ok(())
+    };
+
     let _ = app.emit("tasks-changed", ());
     let _ = app.emit("sync-status-changed", ());
 
     push_result?;
-    pull_result
+    pull_result?;
+    sheets_result
+}
+
+fn sheet_sync_enabled(app: &tauri::AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    let conn = state.db.lock().unwrap();
+    matches!(
+        repos::get_setting(&conn, "sheet_sync_enabled"),
+        Ok(Some(v)) if v == "true"
+    )
 }
 
 fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {

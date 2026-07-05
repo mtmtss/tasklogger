@@ -12,7 +12,10 @@ use sha2::{Digest, Sha256};
 
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-const SCOPE: &str = "https://www.googleapis.com/auth/tasks";
+// tasks: タスク同期 / spreadsheets: 作業ログの Sheets 同期 (spec §6.6)
+// スコープ追加時は再接続 (再同意) が必要
+const SCOPE: &str =
+    "https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/spreadsheets";
 const KEYRING_SERVICE: &str = "TaskLogger";
 const KEYRING_USER: &str = "google_refresh_token";
 

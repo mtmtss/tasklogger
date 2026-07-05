@@ -231,7 +231,7 @@ pub async fn import_gas_csv(app: tauri::AppHandle) -> CmdResult<Option<ImportRes
 
 /// ISO / "yyyy-MM-dd HH:mm[:ss]" / "yyyy/MM/dd HH:mm[:ss]" を受け付ける。
 /// タイムゾーンなしは JST とみなす (GAS 版の表示形式対応)。
-fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
+pub(crate) fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
     if text.is_empty() {
         return None;
     }
@@ -253,7 +253,7 @@ fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
     None
 }
 
-fn normalize_date_text(text: &str) -> Option<String> {
+pub(crate) fn normalize_date_text(text: &str) -> Option<String> {
     if text.len() >= 10 && text.as_bytes()[4] == b'-' && text.as_bytes()[7] == b'-' {
         return Some(text[0..10].to_string());
     }
