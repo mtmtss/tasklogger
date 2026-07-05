@@ -12,6 +12,7 @@ const ALLOWED_KEYS: &[&str] = &[
     "autostart",
     "close_to_tray",
     "idle_pause_minutes",
+    "null_tracking_enabled",
     "user_email",
     "oauth_client_id",
     "oauth_client_secret",

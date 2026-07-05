@@ -245,6 +245,11 @@ pub fn insert_imported_log(conn: &Connection, log: &FullLogRow) -> rusqlite::Res
     Ok(changed == 1)
 }
 
+/// 全ログ中で最も遅い end_time (ISO)。null セッション開始時刻のクランプに使う。
+pub fn latest_log_end(conn: &Connection) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT MAX(end_time) FROM work_logs", [], |row| row.get(0))
+}
+
 pub fn fetch_logs_by_date(conn: &Connection, date_text: &str) -> rusqlite::Result<Vec<WorkLogRow>> {
     let mut stmt = conn.prepare(
         "SELECT task_list_id, task_list_name, task_id, action_type, end_time,

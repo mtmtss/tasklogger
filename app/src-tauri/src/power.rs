@@ -103,6 +103,11 @@ pub fn auto_pause(
 
 /// スリープ突入 (spec §7.2)。
 pub fn on_suspend(app: &tauri::AppHandle) {
+    {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().unwrap();
+        let _ = close_null_tracking(&conn, &time::to_iso(&time::now_utc()), "sleep");
+    }
     auto_pause(app, None, "sleep", true);
 }
 
@@ -148,6 +153,208 @@ pub fn clear_interrupted(app: &tauri::AppHandle) {
     let _ = repos::delete_setting(&conn, INTERRUPTED_KEY);
 }
 
+// ---- null タスク記録 (spec §5.7) ----------------------------------------
+// タスク未選択時の PC 操作時間を「null」という擬似タスクとして記録する。
+// 目的: タスク開始を忘れても作業時間が失われない (記録ミスの影響最小化)。
+// active_session は使わず (状態機械の不変条件を守る)、settings に開始時刻を持つ。
+
+const NULL_TASK: &str = "null";
+/// これ未満の細切れは記録しない (ノイズ防止)
+const NULL_MIN_LOG_SECS: i64 = 60;
+/// 開始判定: 無操作がこの秒数以内なら「操作中」とみなす
+const NULL_START_MAX_IDLE_SECS: i64 = 60;
+
+const NULL_STARTED_KEY: &str = "null_session_started_at";
+const NULL_LAST_SEEN_KEY: &str = "null_session_last_seen";
+
+fn null_tracking_enabled(conn: &rusqlite::Connection) -> bool {
+    // 既定で有効。"false" のときのみ無効
+    !matches!(
+        repos::get_setting(conn, "null_tracking_enabled"),
+        Ok(Some(v)) if v == "false"
+    )
+}
+
+/// 開始時刻の候補を、既存ログの最終 end_time より前に遡らないようクランプする
+/// (直前まで実タスクを実行していた時間との二重計上を防ぐ)。
+pub(crate) fn clamp_null_start(candidate_iso: String, latest_end: Option<String>) -> String {
+    match latest_end {
+        Some(end) if end > candidate_iso => end,
+        _ => candidate_iso,
+    }
+}
+
+/// null セッションを閉じてログを書く。開始していなければ何もしない。
+/// 60 秒未満は破棄。戻り値 = ログを書いたか。
+pub fn close_null_tracking(
+    conn: &rusqlite::Connection,
+    end_iso: &str,
+    end_reason: &str,
+) -> bool {
+    let started = match repos::get_setting(conn, NULL_STARTED_KEY) {
+        Ok(Some(v)) if !v.is_empty() => v,
+        _ => return false,
+    };
+    let _ = repos::delete_setting(conn, NULL_STARTED_KEY);
+    let _ = repos::delete_setting(conn, NULL_LAST_SEEN_KEY);
+
+    let duration = match (time::parse_iso(&started), time::parse_iso(end_iso)) {
+        (Some(s), Some(e)) => (e - s).num_seconds(),
+        _ => return false,
+    };
+    if duration < NULL_MIN_LOG_SECS {
+        return false;
+    }
+
+    let _ = repos::append_work_log(
+        conn,
+        &repos::NewWorkLog {
+            task_list_id: NULL_TASK,
+            task_list_name: NULL_TASK,
+            task_id: NULL_TASK,
+            task_title: NULL_TASK,
+            action_type: "paused",
+            start_time: started,
+            end_time: end_iso.to_string(),
+            duration_seconds: duration,
+            memo: "",
+            end_reason,
+        },
+    );
+    true
+}
+
+/// 実タスク開始時に呼ぶ: 直前までの null 時間をその場で締める (spec §5.7)。
+pub fn close_null_for_task_start(conn: &rusqlite::Connection) -> bool {
+    close_null_tracking(conn, &time::to_iso(&time::now_utc()), "user")
+}
+
+/// ハートビート毎の null 追跡。実セッションの有無と無操作時間で開始/更新/終了する。
+/// ログを書いたら true (呼び出し側で tasks-changed を emit する)。
+fn null_tick(
+    conn: &rusqlite::Connection,
+    idle: i64,
+    threshold: Option<i64>,
+    has_real_session: bool,
+) -> bool {
+    if !null_tracking_enabled(conn) {
+        // 無効化されたら開いている区間は最後に見た時刻で締める
+        if let Ok(Some(last_seen)) = repos::get_setting(conn, NULL_LAST_SEEN_KEY) {
+            return close_null_tracking(conn, &last_seen, "user");
+        }
+        return false;
+    }
+
+    if has_real_session {
+        // 通常は start_task 側で締まっている。取りこぼしの保険
+        return close_null_tracking(conn, &time::to_iso(&time::now_utc()), "user");
+    }
+
+    let now = time::now_utc();
+    let started = matches!(
+        repos::get_setting(conn, NULL_STARTED_KEY),
+        Ok(Some(ref v)) if !v.is_empty()
+    );
+
+    if !started {
+        // ユーザーが操作中なら記録開始 (開始点 = 最後に入力があった時刻)
+        if idle <= NULL_START_MAX_IDLE_SECS {
+            let candidate = time::to_iso(&(now - chrono::Duration::seconds(idle)));
+            let latest_end = repos::latest_log_end(conn).ok().flatten();
+            let start = clamp_null_start(candidate, latest_end);
+            let _ = repos::set_setting(conn, NULL_STARTED_KEY, &start);
+            let _ = repos::set_setting(conn, NULL_LAST_SEEN_KEY, &time::to_iso(&now));
+        }
+        return false;
+    }
+
+    // プロセス停止 (スリープ等) を挟んだ場合: 最後に見た時刻で締める
+    if let Ok(Some(last_seen)) = repos::get_setting(conn, NULL_LAST_SEEN_KEY) {
+        let gap = time::parse_iso(&last_seen)
+            .map(|ls| (now - ls).num_seconds())
+            .unwrap_or(0);
+        if gap > GAP_THRESHOLD_SECS {
+            return close_null_tracking(conn, &last_seen, "sleep");
+        }
+    }
+
+    // 無操作しきい値超過: 最後に入力があった時刻で締める
+    let close_threshold = threshold.unwrap_or(DEFAULT_IDLE_PAUSE_MINUTES * 60);
+    if idle >= close_threshold {
+        let last_input = time::to_iso(&(now - chrono::Duration::seconds(idle)));
+        return close_null_tracking(conn, &last_input, "idle");
+    }
+
+    let _ = repos::set_setting(conn, NULL_LAST_SEEN_KEY, &time::to_iso(&now));
+    false
+}
+
+/// 起動時回復: 前回終了時に開いたままの null 区間を最後に見た時刻で締める。
+pub fn recover_null_tracking(conn: &rusqlite::Connection) {
+    if let Ok(Some(last_seen)) = repos::get_setting(conn, NULL_LAST_SEEN_KEY) {
+        let _ = close_null_tracking(conn, &last_seen, "recovery");
+    } else {
+        let _ = repos::delete_setting(conn, NULL_STARTED_KEY);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::repos;
+    use crate::domain::time;
+
+    #[test]
+    fn clamp_prevents_overlap_with_previous_log() {
+        // 直前の実タスクの end_time より前には遡らない
+        let clamped = clamp_null_start(
+            "2026-07-06T01:00:00.000Z".into(),
+            Some("2026-07-06T01:02:00.000Z".into()),
+        );
+        assert_eq!(clamped, "2026-07-06T01:02:00.000Z");
+
+        // 既存ログの方が古ければ候補をそのまま使う
+        let kept = clamp_null_start(
+            "2026-07-06T01:00:00.000Z".into(),
+            Some("2026-07-06T00:50:00.000Z".into()),
+        );
+        assert_eq!(kept, "2026-07-06T01:00:00.000Z");
+
+        let no_logs = clamp_null_start("2026-07-06T01:00:00.000Z".into(), None);
+        assert_eq!(no_logs, "2026-07-06T01:00:00.000Z");
+    }
+
+    #[test]
+    fn null_session_below_minimum_is_discarded() {
+        let conn = crate::db::open_in_memory().unwrap();
+        let start = time::now_utc() - chrono::Duration::seconds(30);
+        repos::set_setting(&conn, NULL_STARTED_KEY, &time::to_iso(&start)).unwrap();
+
+        let wrote = close_null_tracking(&conn, &time::to_iso(&time::now_utc()), "user");
+        assert!(!wrote, "60 秒未満は記録しない");
+        assert!(repos::get_setting(&conn, NULL_STARTED_KEY).unwrap().is_none());
+    }
+
+    #[test]
+    fn null_session_is_logged_as_null_task() {
+        let conn = crate::db::open_in_memory().unwrap();
+        let start = time::now_utc() - chrono::Duration::seconds(300);
+        repos::set_setting(&conn, NULL_STARTED_KEY, &time::to_iso(&start)).unwrap();
+
+        let wrote = close_null_tracking(&conn, &time::to_iso(&time::now_utc()), "idle");
+        assert!(wrote);
+
+        let logs = repos::fetch_logs_by_date(&conn, &time::today_jst()).unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].task_id, "null");
+        assert_eq!(logs[0].task_list_id, "null");
+        assert_eq!(logs[0].action_type, "paused");
+        assert!(logs[0].duration_seconds >= 299);
+    }
+}
+
+// --------------------------------------------------------------------------
+
 /// 無操作しきい値 (秒)。設定 idle_pause_minutes (デフォルト 5 分)。0 以下で無効。
 fn idle_threshold_secs(app: &tauri::AppHandle) -> Option<i64> {
     let state = app.state::<AppState>();
@@ -191,12 +398,19 @@ pub fn spawn_heartbeat(app: tauri::AppHandle) {
             }
             prev_idle = idle;
 
-            // セッションが無ければ以降は何もしない
-            let heartbeat: Option<String> = {
+            // null タスク追跡 (spec §5.7) + 実セッションのハートビート取得
+            let (heartbeat, null_logged) = {
                 let state = app.state::<AppState>();
                 let conn = state.db.lock().unwrap();
-                repos::get_session_heartbeat(&conn).ok().flatten()
+                let hb = repos::get_session_heartbeat(&conn).ok().flatten();
+                let logged = null_tick(&conn, idle, threshold, hb.is_some());
+                (hb, logged)
             };
+            if null_logged {
+                let _ = app.emit("tasks-changed", ());
+            }
+
+            // セッションが無ければ以降は何もしない
             let Some(heartbeat) = heartbeat else { continue };
 
             // 2. 検知漏れスリープ

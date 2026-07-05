@@ -143,6 +143,7 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let conn = db::open(&data_dir.join("tasklogger.db"))?;
             recover_orphan_session(&conn);
+            power::recover_null_tracking(&conn);
             app.manage(AppState::new(conn));
 
             power::spawn_heartbeat(app.handle().clone());
