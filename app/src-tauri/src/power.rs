@@ -80,6 +80,23 @@ pub fn auto_pause(
     if paused {
         let _ = app.emit("session-changed", None::<ActiveSessionView>);
         let _ = app.emit("tasks-changed", ());
+
+        // 自動中断はユーザーが見ていないときに起きるため OS 通知も出す (spec §11 M5)
+        if set_interrupted {
+            use tauri_plugin_notification::NotificationExt;
+            let reason_text = match end_reason {
+                "idle" => "無操作のため",
+                "sleep" => "スリープのため",
+                "recovery" => "前回終了時に",
+                _ => "",
+            };
+            let _ = app
+                .notification()
+                .builder()
+                .title("TaskLogger: タスクを自動中断しました")
+                .body(format!("{reason_text}作業タイマーを停止しました。"))
+                .show();
+        }
     }
     paused
 }

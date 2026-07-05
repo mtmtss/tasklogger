@@ -8,7 +8,7 @@ import {
   toggleFloatWindow,
 } from "../lib/commands";
 import { useCandidates, useDashboard } from "../lib/queries";
-import { formatMinutes } from "../lib/format";
+import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
@@ -50,7 +50,7 @@ export default function TodayPage() {
         <h1 className="text-xl font-bold">
           今日やるリスト
           <span className="ml-3 text-sm font-normal text-slate-400">
-            {data?.dateText}
+            {data ? formatJapaneseDate(data.dateText) : ""}
           </span>
         </h1>
         <div className="flex items-center gap-3">

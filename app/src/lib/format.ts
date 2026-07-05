@@ -22,3 +22,13 @@ export function formatMinutes(totalSeconds: number): string {
 export function elapsedSince(startAtIso: string, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - new Date(startAtIso).getTime()) / 1000));
 }
+
+/** "2026-07-05" → "7月5日(土)" */
+export function formatJapaneseDate(dateText: string): string {
+  const [y, m, d] = dateText.split("-").map(Number);
+  if (!y || !m || !d) return dateText;
+  const youbi = ["日", "月", "火", "水", "木", "金", "土"][
+    new Date(y, m - 1, d).getDay()
+  ];
+  return `${m}月${d}日(${youbi})`;
+}

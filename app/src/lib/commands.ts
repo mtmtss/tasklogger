@@ -24,6 +24,9 @@ export const setSetting = (key: string, value: string) =>
 
 export const seedSampleData = () => invoke<void>("seed_sample_data");
 
+export const setAutostart = (enabled: boolean) =>
+  invoke<void>("set_autostart", { enabled });
+
 export const toggleFloatWindow = () => invoke<boolean>("toggle_float_window");
 
 export interface SyncStatus {

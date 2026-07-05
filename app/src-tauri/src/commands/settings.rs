@@ -38,6 +38,27 @@ pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> Cm
     repos::set_setting(&conn, &key, &value).map_err(db_err)
 }
 
+/// OS ログイン時の自動起動を切り替える (spec §11 M5)。設定にも永続化する。
+#[tauri::command]
+pub fn set_autostart(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> CmdResult<()> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autolaunch();
+    let result = if enabled {
+        manager.enable()
+    } else {
+        manager.disable()
+    };
+    result.map_err(|e| format!("自動起動の設定に失敗しました: {e}"))?;
+
+    let conn = state.db.lock().unwrap();
+    repos::set_setting(&conn, "autostart", if enabled { "true" } else { "false" })
+        .map_err(db_err)
+}
+
 /// 開発用: サンプルタスクを投入してオフラインで UI を確認できるようにする。
 #[tauri::command]
 pub fn seed_sample_data(app: tauri::AppHandle, state: State<'_, AppState>) -> CmdResult<()> {

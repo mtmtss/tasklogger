@@ -93,6 +93,15 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
                     "sync-error",
                     "同期しようとしたタスクは Google 側で削除されていました。",
                 );
+                {
+                    use tauri_plugin_notification::NotificationExt;
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title("TaskLogger: 同期をスキップしました")
+                        .body("対象タスクが Google 側で削除されていたため、変更の送信を破棄しました。")
+                        .show();
+                }
             }
             Err(err) => {
                 // ネットワーク/一時エラー → attempts を上げて次サイクルで再試行

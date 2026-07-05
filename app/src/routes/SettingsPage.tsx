@@ -7,6 +7,7 @@ import {
   getSettings,
   importGasCsv,
   seedSampleData,
+  setAutostart,
   setSetting,
 } from "../lib/commands";
 import { useSyncStatus } from "../lib/queries";
@@ -21,6 +22,8 @@ export default function SettingsPage() {
   const [devMessage, setDevMessage] = useState<string | null>(null);
   const [closeToTray, setCloseToTray] = useState(true);
   const [idleMinutes, setIdleMinutes] = useState("5");
+  const [autostart, setAutostartState] = useState(false);
+  const [behaviorError, setBehaviorError] = useState<string | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -29,9 +32,19 @@ export default function SettingsPage() {
         setClientSecret(settings["oauth_client_secret"] ?? "");
         setCloseToTray(settings["close_to_tray"] !== "false");
         setIdleMinutes(settings["idle_pause_minutes"] ?? "5");
+        setAutostartState(settings["autostart"] === "true");
       })
       .catch(() => {});
   }, []);
+
+  const handleAutostart = (checked: boolean) => {
+    setBehaviorError(null);
+    setAutostartState(checked);
+    setAutostart(checked).catch((e) => {
+      setAutostartState(!checked);
+      setBehaviorError(String(e));
+    });
+  };
 
   const handleCloseToTray = (checked: boolean) => {
     setCloseToTray(checked);
@@ -162,6 +175,18 @@ export default function SettingsPage() {
           スリープ・画面ロック・スクリーンセーバ・離席をまとめて検知します。
           中断ログは最後に操作した時刻で締められます。
         </p>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={autostart}
+            onChange={(e) => handleAutostart(e.target.checked)}
+            className="accent-sky-600"
+          />
+          Windows サインイン時に自動起動する
+        </label>
+        {behaviorError && (
+          <p className="mt-2 text-sm text-rose-300">{behaviorError}</p>
+        )}
       </div>
 
       <DataSection />
