@@ -1,4 +1,6 @@
+pub mod analytics;
 pub mod dashboard;
+pub mod import_export;
 pub mod session;
 pub mod settings;
 

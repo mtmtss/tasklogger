@@ -3,7 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   connectGoogle,
   disconnectGoogle,
+  exportCsv,
   getSettings,
+  importGasCsv,
   seedSampleData,
   setSetting,
 } from "../lib/commands";
@@ -162,6 +164,8 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      <DataSection />
+
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
         <h2 className="text-sm font-semibold text-slate-300">開発用</h2>
         <p className="mt-1 text-sm text-slate-500">
@@ -180,5 +184,83 @@ export default function SettingsPage() {
         {devMessage && <p className="mt-2 text-sm text-sky-300">{devMessage}</p>}
       </div>
     </section>
+  );
+}
+
+/** 作業ログの CSV エクスポート / GAS 旧データインポート (spec §5.6)。 */
+function DataSection() {
+  const [exportStart, setExportStart] = useState("2020-01-01");
+  const [exportEnd, setExportEnd] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [message, setMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const handleExport = () => {
+    setMessage(null);
+    exportCsv(exportStart, exportEnd)
+      .then((path) =>
+        setMessage(path ? `保存しました: ${path}` : "キャンセルしました。"),
+      )
+      .catch((e) => setMessage(String(e)));
+  };
+
+  const handleImport = () => {
+    setMessage(null);
+    importGasCsv()
+      .then((result) => {
+        if (!result) {
+          setMessage("キャンセルしました。");
+          return;
+        }
+        setMessage(
+          `取り込み ${result.imported} 件、スキップ (重複等) ${result.skipped} 件`,
+        );
+        void queryClient.invalidateQueries();
+      })
+      .catch((e) => setMessage(String(e)));
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <h2 className="text-sm font-semibold text-slate-300">作業ログのデータ</h2>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <input
+          type="date"
+          value={exportStart}
+          onChange={(e) => setExportStart(e.target.value)}
+          className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm [color-scheme:dark]"
+        />
+        <span className="text-slate-500">〜</span>
+        <input
+          type="date"
+          value={exportEnd}
+          onChange={(e) => setExportEnd(e.target.value)}
+          className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm [color-scheme:dark]"
+        />
+        <button
+          onClick={handleExport}
+          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+        >
+          CSV エクスポート
+        </button>
+      </div>
+
+      <div className="mt-4 border-t border-slate-800 pt-3">
+        <p className="text-sm text-slate-500">
+          GAS 版の WorkLogs シートを CSV 保存したファイルを取り込みます (logId
+          重複は自動スキップ)。
+        </p>
+        <button
+          onClick={handleImport}
+          className="mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+        >
+          GAS データをインポート
+        </button>
+      </div>
+
+      {message && <p className="mt-3 text-sm text-sky-300">{message}</p>}
+    </div>
   );
 }

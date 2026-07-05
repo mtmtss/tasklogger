@@ -53,3 +53,55 @@ export const getInterruptedTask = () =>
 export const resumeInterrupted = () => invoke<void>("resume_interrupted");
 
 export const dismissInterrupted = () => invoke<void>("dismiss_interrupted");
+
+export interface DateSummary {
+  date: string;
+  totalSeconds: number;
+  totalMinutes: number;
+  sessionCount: number;
+}
+
+export interface ListSummary {
+  taskListId: string;
+  taskListName: string;
+  totalSeconds: number;
+  totalMinutes: number;
+  sessionCount: number;
+  completedCount: number;
+}
+
+export interface TaskSummary extends ListSummary {
+  taskId: string;
+  taskTitle: string;
+  lastWorkedDate: string;
+}
+
+export interface ArchiveAnalytics {
+  startDate: string;
+  endDate: string;
+  totalSeconds: number;
+  totalMinutes: number;
+  totalSessions: number;
+  completedSessions: number;
+  activeDays: number;
+  averageMinutesPerDay: number;
+  byDate: DateSummary[];
+  byTaskList: ListSummary[];
+  byTask: TaskSummary[];
+}
+
+export const getArchiveAnalytics = (startDate: string, endDate: string) =>
+  invoke<ArchiveAnalytics>("get_archive_analytics", { startDate, endDate });
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+}
+
+/** 保存ダイアログでキャンセルすると null。成功時は保存先パス。 */
+export const exportCsv = (startDate: string, endDate: string) =>
+  invoke<string | null>("export_csv", { startDate, endDate });
+
+/** ファイル選択でキャンセルすると null。 */
+export const importGasCsv = () =>
+  invoke<ImportResult | null>("import_gas_csv");

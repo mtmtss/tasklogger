@@ -157,6 +157,94 @@ pub fn append_work_log(conn: &Connection, log: &NewWorkLog) -> rusqlite::Result<
     Ok(log_id)
 }
 
+/// アーカイブ集計・エクスポート用の完全なログ行。
+pub struct FullLogRow {
+    pub log_id: String,
+    pub user_id: String,
+    pub task_list_id: String,
+    pub task_list_name: String,
+    pub task_id: String,
+    pub task_title: String,
+    pub action_type: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub duration_seconds: i64,
+    pub duration_minutes: i64,
+    pub log_date: String,
+    pub memo: String,
+    pub created_at: String,
+    pub end_reason: String,
+    pub source: String,
+}
+
+pub fn fetch_logs_by_range(
+    conn: &Connection,
+    start_date: &str,
+    end_date: &str,
+) -> rusqlite::Result<Vec<FullLogRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT log_id, user_id, task_list_id, task_list_name, task_id, task_title,
+                action_type, start_time, end_time, duration_seconds, duration_minutes,
+                log_date, memo, created_at, end_reason, source
+         FROM work_logs
+         WHERE log_date >= ?1 AND log_date <= ?2
+         ORDER BY log_date, start_time",
+    )?;
+    let rows = stmt
+        .query_map(params![start_date, end_date], |row| {
+            Ok(FullLogRow {
+                log_id: row.get(0)?,
+                user_id: row.get(1)?,
+                task_list_id: row.get(2)?,
+                task_list_name: row.get(3)?,
+                task_id: row.get(4)?,
+                task_title: row.get(5)?,
+                action_type: row.get(6)?,
+                start_time: row.get(7)?,
+                end_time: row.get(8)?,
+                duration_seconds: row.get(9)?,
+                duration_minutes: row.get(10)?,
+                log_date: row.get(11)?,
+                memo: row.get(12)?,
+                created_at: row.get(13)?,
+                end_reason: row.get(14)?,
+                source: row.get(15)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// インポート用: log_id が既存なら何もしない (重複防止, spec §5.6)。true = 挿入した。
+pub fn insert_imported_log(conn: &Connection, log: &FullLogRow) -> rusqlite::Result<bool> {
+    let changed = conn.execute(
+        "INSERT OR IGNORE INTO work_logs
+           (log_id, user_id, task_list_id, task_list_name, task_id, task_title,
+            action_type, start_time, end_time, duration_seconds, duration_minutes,
+            log_date, memo, created_at, end_reason, source)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        params![
+            log.log_id,
+            log.user_id,
+            log.task_list_id,
+            log.task_list_name,
+            log.task_id,
+            log.task_title,
+            log.action_type,
+            log.start_time,
+            log.end_time,
+            log.duration_seconds,
+            log.duration_minutes,
+            log.log_date,
+            log.memo,
+            log.created_at,
+            log.end_reason,
+            log.source,
+        ],
+    )?;
+    Ok(changed == 1)
+}
+
 pub fn fetch_logs_by_date(conn: &Connection, date_text: &str) -> rusqlite::Result<Vec<WorkLogRow>> {
     let mut stmt = conn.prepare(
         "SELECT task_list_id, task_list_name, task_id, action_type, end_time,
