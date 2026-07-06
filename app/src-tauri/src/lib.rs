@@ -188,6 +188,14 @@ pub fn run() {
             google::sync_now,
             google::get_sync_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS: Dock アイコンのクリック (applicationShouldHandleReopen)。
+            // 「閉じる」でトレイ常駐 (hide) したメイン窓を Dock から復帰できるようにする。
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                tray::show_main_window(_app);
+            }
+        });
 }
