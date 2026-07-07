@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   doItNow,
@@ -8,7 +8,6 @@ import {
   scheduleForToday,
   type PlanNotTodayItem,
   type PlanTaskItem,
-  type StoredPlan,
 } from "../lib/commands";
 
 /**
@@ -21,15 +20,19 @@ export default function DailyPlanCard({
   onError: (message: string) => void;
 }) {
   const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
-  const [plan, setPlan] = useState<StoredPlan | null>(null);
   const [note, setNote] = useState("");
   const [generating, setGenerating] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    getDailyPlan().then(setPlan).catch(() => {});
-  }, []);
+  // 生成済みプランはクエリキャッシュに保持する。ページ再訪・再起動でも
+  // キャッシュ or DB (get_daily_plan) から即座に復元され、一日を通して見える。
+  const planQuery = useQuery({
+    queryKey: ["dailyPlan"],
+    queryFn: getDailyPlan,
+    enabled: aiStatus.data?.configured ?? false,
+  });
+  const plan = planQuery.data ?? null;
 
   if (!aiStatus.data?.configured) return null;
 
@@ -37,7 +40,7 @@ export default function DailyPlanCard({
     setGenerating(true);
     generateDailyPlan(note)
       .then((stored) => {
-        setPlan(stored);
+        queryClient.setQueryData(["dailyPlan"], stored);
         setCollapsed(false);
       })
       .catch((e) => onError(String(e)))

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   generateDailyReview,
@@ -6,7 +6,6 @@ import {
   getDailyReview,
   scheduleForToday,
   type ReviewTomorrowItem,
-  type StoredReview,
 } from "../lib/commands";
 
 /**
@@ -19,14 +18,17 @@ export default function DailyReviewCard({
   onError: (message: string) => void;
 }) {
   const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
-  const [review, setReview] = useState<StoredReview | null>(null);
   const [generating, setGenerating] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    getDailyReview().then(setReview).catch(() => {});
-  }, []);
+  // 生成済みレビューはクエリキャッシュに保持 (プランと同様、再訪・再起動でも復元)。
+  const reviewQuery = useQuery({
+    queryKey: ["dailyReview"],
+    queryFn: getDailyReview,
+    enabled: aiStatus.data?.configured ?? false,
+  });
+  const review = reviewQuery.data ?? null;
 
   if (!aiStatus.data?.configured) return null;
 
@@ -34,7 +36,7 @@ export default function DailyReviewCard({
     setGenerating(true);
     generateDailyReview()
       .then((stored) => {
-        setReview(stored);
+        queryClient.setQueryData(["dailyReview"], stored);
         setCollapsed(false);
       })
       .catch((e) => onError(String(e)))

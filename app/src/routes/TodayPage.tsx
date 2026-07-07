@@ -21,6 +21,14 @@ export default function TodayPage() {
   const candidates = useCandidates();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+
+  const toggleList = (id: string) =>
+    setExpandedLists((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -174,31 +182,57 @@ export default function TodayPage() {
           <p className="text-sm text-slate-500">候補はありません。</p>
         )}
         <div className="space-y-2">
-          {candidates.data?.flatMap((group) =>
-            group.tasks.map((task) => (
+          {candidates.data?.map((group) => {
+            const expanded = expandedLists.has(group.taskListId);
+            return (
               <div
-                key={task.taskId}
-                className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-2.5"
+                key={group.taskListId}
+                className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/40"
               >
-                <div className="min-w-0">
-                  <span className="mr-2 text-xs text-slate-500">
-                    {group.taskListName}
-                  </span>
-                  <span className="truncate text-sm">{task.title}</span>
-                </div>
                 <button
-                  onClick={() =>
-                    run(() =>
-                      doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
-                    )
-                  }
-                  className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
+                  onClick={() => toggleList(group.taskListId)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-900/60"
                 >
-                  今すぐやる
+                  <span className="text-sm text-slate-300">
+                    {group.taskListName}
+                    <span className="ml-2 text-xs text-slate-500">
+                      {group.tasks.length}件
+                    </span>
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {expanded ? "閉じる ▲" : "展開 ▼"}
+                  </span>
                 </button>
+                {expanded && (
+                  <div className="divide-y divide-slate-800/60 border-t border-slate-800">
+                    {group.tasks.map((task) => (
+                      <div
+                        key={task.taskId}
+                        className="flex items-center justify-between gap-3 px-4 py-2"
+                      >
+                        <span className="min-w-0 truncate text-sm">
+                          {task.title}
+                        </span>
+                        <button
+                          onClick={() =>
+                            run(() =>
+                              doItNow({
+                                taskListId: task.taskListId,
+                                taskId: task.taskId,
+                              }),
+                            )
+                          }
+                          className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
+                        >
+                          今すぐやる
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )),
-          )}
+            );
+          })}
         </div>
       </div>
 
