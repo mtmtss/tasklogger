@@ -30,6 +30,9 @@ pub fn start_task(
             .map_err(db_err)?
             .ok_or("タスクが見つかりません。")?;
 
+        // 直前までの null (未割当) 時間をここで締める (spec §5.7)
+        crate::power::close_null_for_task_start(&conn);
+
         repos::create_active_session(
             &conn,
             &row.task_list_id,
@@ -40,6 +43,7 @@ pub fn start_task(
         .map_err(db_err)?;
     }
     emit_session_changed(&app, &state);
+    emit_tasks_changed(&app);
     Ok(())
 }
 
@@ -217,6 +221,7 @@ pub fn do_it_now(
             .ok_or("タスクが見つかりません。")?;
 
         let tx = conn.unchecked_transaction().map_err(db_err)?;
+        crate::power::close_null_for_task_start(&tx);
         repos::set_task_due_today_locally(&tx, &row.task_list_id, &row.id).map_err(db_err)?;
         repos::enqueue_sync_op(
             &tx,

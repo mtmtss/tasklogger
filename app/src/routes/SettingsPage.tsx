@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [closeToTray, setCloseToTray] = useState(true);
   const [idleMinutes, setIdleMinutes] = useState("5");
   const [autostart, setAutostartState] = useState(false);
+  const [nullTracking, setNullTracking] = useState(true);
   const [behaviorError, setBehaviorError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,9 +34,15 @@ export default function SettingsPage() {
         setCloseToTray(settings["close_to_tray"] !== "false");
         setIdleMinutes(settings["idle_pause_minutes"] ?? "5");
         setAutostartState(settings["autostart"] === "true");
+        setNullTracking(settings["null_tracking_enabled"] !== "false");
       })
       .catch(() => {});
   }, []);
+
+  const handleNullTracking = (checked: boolean) => {
+    setNullTracking(checked);
+    void setSetting("null_tracking_enabled", checked ? "true" : "false");
+  };
 
   const handleAutostart = (checked: boolean) => {
     setBehaviorError(null);
@@ -184,6 +191,19 @@ export default function SettingsPage() {
           />
           Windows サインイン時に自動起動する
         </label>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={nullTracking}
+            onChange={(e) => handleNullTracking(e.target.checked)}
+            className="accent-sky-600"
+          />
+          タスク未選択時の PC 操作を「null」タスクとして記録する
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          タスクを開始し忘れても PC を操作していた時間が記録されます (1
+          分未満の細切れは記録しません)。
+        </p>
         {behaviorError && (
           <p className="mt-2 text-sm text-rose-300">{behaviorError}</p>
         )}
