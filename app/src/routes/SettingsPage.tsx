@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  clearAnthropicApiKey,
   connectGoogle,
   disconnectGoogle,
   exportCsv,
+  getAiStatus,
   getSettings,
   importGasCsv,
   seedSampleData,
+  setAnthropicApiKey,
   setAutostart,
   setSetting,
 } from "../lib/commands";
@@ -191,6 +194,8 @@ export default function SettingsPage() {
 
       <SheetSyncSection connected={connected} />
 
+      <AiSection />
+
       <DataSection />
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
@@ -211,6 +216,137 @@ export default function SettingsPage() {
         {devMessage && <p className="mt-2 text-sm text-sky-300">{devMessage}</p>}
       </div>
     </section>
+  );
+}
+
+/** AI 拡張「今日の作戦」設定 (docs/ai-extension-specification.md §4.3)。 */
+function AiSection() {
+  const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
+  const queryClient = useQueryClient();
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("claude-opus-4-8");
+  const [userContext, setUserContext] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSettings()
+      .then((settings) => {
+        if (settings["ai_model"]) setModel(settings["ai_model"]);
+        setUserContext(settings["ai_user_context"] ?? "");
+      })
+      .catch(() => {});
+  }, []);
+
+  const configured = aiStatus.data?.configured ?? false;
+  const refresh = () =>
+    void queryClient.invalidateQueries({ queryKey: ["aiStatus"] });
+
+  const handleSaveKey = () => {
+    setMessage(null);
+    setSaving(true);
+    setAnthropicApiKey(apiKey)
+      .then(() => {
+        setMessage("接続を確認して保存しました。今日ページに「今日の作戦」カードが表示されます。");
+        setApiKey("");
+      })
+      .catch((e) => setMessage(String(e)))
+      .finally(() => {
+        setSaving(false);
+        refresh();
+      });
+  };
+
+  const handleClearKey = () => {
+    clearAnthropicApiKey()
+      .then(() => setMessage("API キーを削除しました。AI 機能は無効になります。"))
+      .catch((e) => setMessage(String(e)))
+      .finally(refresh);
+  };
+
+  const handleModel = (value: string) => {
+    setModel(value);
+    void setSetting("ai_model", value);
+  };
+
+  const handleUserContext = (value: string) => {
+    setUserContext(value);
+    void setSetting("ai_user_context", value);
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-300">
+          AI「今日の作戦」(Claude API)
+        </h2>
+        <span
+          className={`text-xs ${configured ? "text-emerald-400" : "text-slate-500"}`}
+        >
+          {configured ? "有効" : "未設定"}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        有効にすると、生成時にタスクのタイトル・メモ・作業実績の要約が Anthropic
+        API に送信されます (キーの設定 = 同意)。キーは Windows
+        資格情報マネージャーにのみ保存されます。
+      </p>
+
+      {!configured ? (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Anthropic API キー (sk-ant-…)"
+            type="password"
+            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
+          />
+          <button
+            onClick={handleSaveKey}
+            disabled={saving || !apiKey.trim()}
+            className="shrink-0 rounded-md bg-violet-600 px-3 py-2 text-sm text-white hover:bg-violet-500 disabled:opacity-50"
+          >
+            {saving ? "接続確認中…" : "接続して保存"}
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleClearKey}
+          className="mt-3 rounded-md border border-rose-500/50 px-3 py-1.5 text-sm text-rose-300 hover:bg-rose-500/10"
+        >
+          API キーを削除 (AI 機能を無効化)
+        </button>
+      )}
+
+      <div className="mt-4 space-y-3 border-t border-slate-800 pt-3">
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          モデル
+          <select
+            value={model}
+            onChange={(e) => handleModel(e.target.value)}
+            className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+          >
+            <option value="claude-opus-4-8">claude-opus-4-8 (品質優先・約$0.05/回)</option>
+            <option value="claude-sonnet-5">claude-sonnet-5 (バランス・約$0.03/回)</option>
+            <option value="claude-haiku-4-5">claude-haiku-4-5 (低コスト・約$0.01/回)</option>
+          </select>
+        </label>
+        <div>
+          <label className="text-sm text-slate-300">
+            プロファイル (作戦生成の前提として毎回使われます)
+          </label>
+          <textarea
+            value={userContext}
+            onChange={(e) => handleUserContext(e.target.value)}
+            placeholder="例: 情報セキュリティの研究者。午前は集中作業向き。発表準備を研究実装より優先しがちなので注意。"
+            rows={4}
+            className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {message && <p className="mt-3 text-sm text-sky-300">{message}</p>}
+    </div>
   );
 }
 

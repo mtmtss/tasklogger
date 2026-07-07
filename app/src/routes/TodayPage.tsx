@@ -10,6 +10,7 @@ import {
 import { useCandidates, useDashboard } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
+import DailyPlanCard from "../components/DailyPlanCard";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
@@ -75,6 +76,8 @@ export default function TodayPage() {
           </button>
         </div>
       )}
+
+      <DailyPlanCard onError={setError} />
 
       {data && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -78,6 +78,18 @@ const MIGRATIONS: &[&str] = &[
       value TEXT NOT NULL
     );
     "#,
+    // v2: AI 拡張「今日の作戦」の履歴 (docs/ai-extension-specification.md §5.1)
+    r#"
+    CREATE TABLE daily_plans (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_date    TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      input_note   TEXT NOT NULL DEFAULT '',
+      model        TEXT NOT NULL,
+      plan_json    TEXT NOT NULL
+    );
+    CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
+    "#,
 ];
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {

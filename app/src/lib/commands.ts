@@ -57,6 +57,61 @@ export const resumeInterrupted = () => invoke<void>("resume_interrupted");
 
 export const dismissInterrupted = () => invoke<void>("dismiss_interrupted");
 
+export const scheduleForToday = (task: TaskRef) =>
+  invoke<void>("schedule_for_today", { task });
+
+// ---- AI 拡張「今日の作戦」 ----
+
+export interface PlanTaskItem {
+  taskListId: string | null;
+  taskId: string | null;
+  title: string;
+  firstStep: string;
+  estimatedMinutes: number;
+  reason: string;
+}
+
+export interface PlanNotTodayItem {
+  taskListId: string | null;
+  taskId: string | null;
+  title: string;
+  reason: string;
+}
+
+export interface DailyPlan {
+  must_do: PlanTaskItem[];
+  if_possible: PlanTaskItem[];
+  five_minute: PlanTaskItem[];
+  not_today: PlanNotTodayItem[];
+  advice: string;
+}
+
+export interface StoredPlan {
+  planDate: string;
+  generatedAt: string;
+  inputNote: string;
+  model: string;
+  plan: DailyPlan;
+}
+
+export interface AiStatus {
+  configured: boolean;
+  model: string;
+}
+
+export const getAiStatus = () => invoke<AiStatus>("get_ai_status");
+
+export const setAnthropicApiKey = (key: string) =>
+  invoke<void>("set_anthropic_api_key", { key });
+
+export const clearAnthropicApiKey = () =>
+  invoke<void>("clear_anthropic_api_key");
+
+export const generateDailyPlan = (note: string) =>
+  invoke<StoredPlan>("generate_daily_plan", { note });
+
+export const getDailyPlan = () => invoke<StoredPlan | null>("get_daily_plan");
+
 export interface DateSummary {
   date: string;
   totalSeconds: number;

@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 mod db;
 mod domain;
@@ -171,6 +172,7 @@ pub fn run() {
             commands::session::stop_task,
             commands::session::complete_task_direct,
             commands::session::do_it_now,
+            commands::session::schedule_for_today,
             commands::session::get_interrupted_task,
             commands::session::resume_interrupted,
             commands::session::dismiss_interrupted,
@@ -187,6 +189,11 @@ pub fn run() {
             google::disconnect_google,
             google::sync_now,
             google::get_sync_status,
+            ai::get_ai_status,
+            ai::set_anthropic_api_key,
+            ai::clear_anthropic_api_key,
+            ai::generate_daily_plan,
+            ai::get_daily_plan,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
