@@ -90,6 +90,17 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
     "#,
+    // v3: AI 拡張「日次レビュー」の履歴 (docs/ai-extension-specification.md §10 第2弾)
+    r#"
+    CREATE TABLE daily_reviews (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_date   TEXT NOT NULL,
+      generated_at  TEXT NOT NULL,
+      model         TEXT NOT NULL,
+      review_json   TEXT NOT NULL
+    );
+    CREATE INDEX idx_daily_reviews_date ON daily_reviews(review_date);
+    "#,
 ];
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {

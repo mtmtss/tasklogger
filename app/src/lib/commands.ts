@@ -111,6 +111,39 @@ export const generateDailyPlan = (note: string) =>
 
 export const getDailyPlan = () => invoke<StoredPlan | null>("get_daily_plan");
 
+export interface ReviewIncompleteItem {
+  title: string;
+  reason: string;
+}
+
+export interface ReviewTomorrowItem {
+  taskListId: string | null;
+  taskId: string | null;
+  title: string;
+  reason: string;
+}
+
+export interface DailyReview {
+  done: string[];
+  incomplete: ReviewIncompleteItem[];
+  tomorrow: ReviewTomorrowItem[];
+  research_progress: string;
+  summary: string;
+}
+
+export interface StoredReview {
+  reviewDate: string;
+  generatedAt: string;
+  model: string;
+  review: DailyReview;
+}
+
+export const generateDailyReview = () =>
+  invoke<StoredReview>("generate_daily_review");
+
+export const getDailyReview = () =>
+  invoke<StoredReview | null>("get_daily_review");
+
 export interface DateSummary {
   date: string;
   totalSeconds: number;

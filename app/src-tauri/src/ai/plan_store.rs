@@ -69,6 +69,66 @@ pub fn latest_plan_today(conn: &Connection) -> Result<Option<StoredPlan>, String
     .transpose()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredReview {
+    pub review_date: String,
+    pub generated_at: String,
+    pub model: String,
+    pub review: serde_json::Value,
+}
+
+pub fn save_review(
+    conn: &Connection,
+    date: &str,
+    model: &str,
+    review_json: &serde_json::Value,
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO daily_reviews (review_date, generated_at, model, review_json)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            date,
+            time::to_iso(&time::now_utc()),
+            model,
+            review_json.to_string()
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 指定日の最新レビュー。
+pub fn latest_review(conn: &Connection, date: &str) -> Result<Option<StoredReview>, String> {
+    conn.query_row(
+        "SELECT review_date, generated_at, model, review_json
+         FROM daily_reviews WHERE review_date = ?1
+         ORDER BY generated_at DESC LIMIT 1",
+        params![date],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        },
+    )
+    .optional()
+    .map_err(|e| e.to_string())?
+    .map(|(review_date, generated_at, model, review_json)| {
+        serde_json::from_str(&review_json)
+            .map(|review| StoredReview {
+                review_date,
+                generated_at,
+                model,
+                review,
+            })
+            .map_err(|e| format!("保存済みレビューの解析に失敗しました: {e}"))
+    })
+    .transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

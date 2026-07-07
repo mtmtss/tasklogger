@@ -194,6 +194,8 @@ pub fn run() {
             ai::clear_ai_api_key,
             ai::generate_daily_plan,
             ai::get_daily_plan,
+            ai::generate_daily_review,
+            ai::get_daily_review,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -16,8 +16,8 @@ pub const ALLOWED_MODELS: [&str; 3] = [
 const KEYRING_SERVICE: &str = "TaskLogger";
 const KEYRING_USER: &str = "gemini_api_key";
 
-/// 役割定義と出力ルール。
-const SYSTEM_FIXED: &str = "\
+/// 「今日の作戦」の役割定義と出力ルール。
+const PLAN_SYSTEM: &str = "\
 あなたはタスク管理アプリ TaskLogger の「今日の作戦」コーチである。\
 ユーザーの実際の作業記録(実績時間・未割当時間・中断パターン)に基づき、\
 今日を現実的なサイズに圧縮した実行計画を立てる。\n\
@@ -31,6 +31,19 @@ const SYSTEM_FIXED: &str = "\
 - 提案が既存タスクに対応する場合は taskListId / taskId をそのまま返す。分解した一手など対応タスクがない場合は null にする\n\
 - advice は 1〜3 文で、実績データに基づく具体的な根拠を含める\n\
 - すべて日本語で書く";
+
+/// 「日次レビュー」の役割定義と出力ルール (AI 拡張仕様 §10 第2弾)。
+const REVIEW_SYSTEM: &str = "\
+あなたはタスク管理アプリ TaskLogger の「振り返り」コーチである。\
+その日の作戦(あれば)と実際の作業記録を突合し、責めずに次につなげる短い振り返りを書く。\n\
+\n\
+原則:\n\
+- done は今日前進したことを 1〜5 件、具体的に(実績時間や完了に触れる)\n\
+- incomplete は未達・中断を挙げ、reason で理由を推測する。自動中断(無操作・スリープ)が多い場合は集中の妨げや離席として扱い、本人を責めない\n\
+- tomorrow は明日に回す候補を 0〜5 件。既存タスクに対応するなら taskListId / taskId を返す(なければ null)\n\
+- research_progress は研究・制作面の前進を 1 文で(なければ空文字)\n\
+- summary は 1〜3 文の総括。計画と実績の乖離があれば一言触れ、明日への現実的な一歩を添える\n\
+- すべて日本語で、励ましつつ淡々と書く";
 
 /// 出力スキーマ (AI 拡張仕様 §3.3)。Gemini の responseSchema 形式 (OpenAPI 風、型は大文字)。
 fn plan_schema() -> Value {
@@ -71,6 +84,41 @@ fn plan_schema() -> Value {
     })
 }
 
+/// 日次レビューの出力スキーマ。
+fn review_schema() -> Value {
+    let tomorrow_item = json!({
+        "type": "OBJECT",
+        "properties": {
+            "taskListId": {"type": "STRING", "nullable": true},
+            "taskId": {"type": "STRING", "nullable": true},
+            "title": {"type": "STRING"},
+            "reason": {"type": "STRING"}
+        },
+        "required": ["title", "reason"]
+    });
+    json!({
+        "type": "OBJECT",
+        "properties": {
+            "done": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "incomplete": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "title": {"type": "STRING"},
+                        "reason": {"type": "STRING"}
+                    },
+                    "required": ["title", "reason"]
+                }
+            },
+            "tomorrow": {"type": "ARRAY", "items": tomorrow_item},
+            "research_progress": {"type": "STRING"},
+            "summary": {"type": "STRING"}
+        },
+        "required": ["done", "incomplete", "tomorrow", "research_progress", "summary"]
+    })
+}
+
 pub fn save_api_key(key: &str) -> Result<(), String> {
     keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
         .and_then(|e| e.set_password(key))
@@ -90,10 +138,15 @@ pub fn delete_api_key() {
     }
 }
 
-/// リクエストボディの組立 (テスト対象)。
-pub fn build_request_body(user_context: &str, payload: &str) -> Value {
+/// リクエストボディの組立 (テスト対象)。role_system は用途別の役割定義、schema は出力スキーマ。
+pub fn build_request_body(
+    role_system: &str,
+    user_context: &str,
+    schema: Value,
+    payload: &str,
+) -> Value {
     let system = format!(
-        "{SYSTEM_FIXED}\n\n# ユーザープロファイル\n{}",
+        "{role_system}\n\n# ユーザープロファイル\n{}",
         if user_context.is_empty() {
             "(未設定)"
         } else {
@@ -105,7 +158,7 @@ pub fn build_request_body(user_context: &str, payload: &str) -> Value {
         "contents": [{"role": "user", "parts": [{"text": payload}]}],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "responseSchema": plan_schema(),
+            "responseSchema": schema,
             "maxOutputTokens": 8192
         }
     })
@@ -148,14 +201,36 @@ pub fn extract_plan(response: &Value) -> Result<Value, String> {
     serde_json::from_str(text).map_err(|e| format!("プランの解析に失敗しました: {e}"))
 }
 
-/// プラン生成 (blocking)。429/5xx は 1 回だけリトライする。
+/// 今日の作戦を生成 (blocking)。
 pub fn generate_plan(
     api_key: &str,
     model: &str,
     user_context: &str,
     payload: &str,
 ) -> Result<Value, String> {
-    let body = build_request_body(user_context, payload);
+    generate(api_key, model, PLAN_SYSTEM, user_context, plan_schema(), payload)
+}
+
+/// 日次レビューを生成 (blocking)。
+pub fn generate_review(
+    api_key: &str,
+    model: &str,
+    user_context: &str,
+    payload: &str,
+) -> Result<Value, String> {
+    generate(api_key, model, REVIEW_SYSTEM, user_context, review_schema(), payload)
+}
+
+/// 汎用生成 (blocking)。429/5xx は 1 回だけリトライする。
+fn generate(
+    api_key: &str,
+    model: &str,
+    role_system: &str,
+    user_context: &str,
+    schema: Value,
+    payload: &str,
+) -> Result<Value, String> {
+    let body = build_request_body(role_system, user_context, schema, payload);
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(180))
         .build()
@@ -237,7 +312,7 @@ mod tests {
 
     #[test]
     fn request_body_shape() {
-        let body = build_request_body("研究者。", "今日のタスク: なし");
+        let body = build_request_body(PLAN_SYSTEM, "研究者。", plan_schema(), "今日のタスク: なし");
         // JSON 出力の強制
         assert_eq!(
             body["generationConfig"]["responseMimeType"],
@@ -258,6 +333,18 @@ mod tests {
             body["contents"][0]["parts"][0]["text"],
             "今日のタスク: なし"
         );
+    }
+
+    #[test]
+    fn review_body_uses_review_schema() {
+        let body = build_request_body(REVIEW_SYSTEM, "", review_schema(), "実績: ...");
+        let props = &body["generationConfig"]["responseSchema"]["properties"];
+        assert!(props.get("done").is_some());
+        assert!(props.get("summary").is_some());
+        let system = body["systemInstruction"]["parts"][0]["text"]
+            .as_str()
+            .unwrap();
+        assert!(system.contains("振り返り"));
     }
 
     #[test]

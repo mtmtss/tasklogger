@@ -5,6 +5,7 @@
 pub mod context_builder;
 pub mod gemini_api;
 pub mod plan_store;
+pub mod review_builder;
 
 use serde::Serialize;
 use tauri::{Manager, State};
@@ -107,4 +108,52 @@ pub async fn generate_daily_plan(
 pub fn get_daily_plan(state: State<'_, AppState>) -> CmdResult<Option<plan_store::StoredPlan>> {
     let conn = state.db.lock().unwrap();
     plan_store::latest_plan_today(&conn)
+}
+
+/// 今日の振り返りを生成して保存する (async: UI をブロックしない)。
+#[tauri::command]
+pub async fn generate_daily_review(
+    app: tauri::AppHandle,
+) -> CmdResult<plan_store::StoredReview> {
+    let api_key = gemini_api::load_api_key()
+        .ok_or("API キーが未設定です。設定ページで入力してください。")?;
+    let today = crate::domain::time::today_jst();
+
+    let (model, user_context, payload) = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().unwrap();
+        let model = current_model(&conn);
+        let user_context = repos::get_setting(&conn, "ai_user_context")
+            .map_err(db_err)?
+            .unwrap_or_default();
+        let payload = review_builder::build_payload(&conn, &today)?;
+        (model, user_context, payload)
+    };
+
+    let review_model = model.clone();
+    let review = tauri::async_runtime::spawn_blocking(move || {
+        gemini_api::generate_review(&api_key, &review_model, &user_context, &payload)
+    })
+    .await
+    .map_err(|e| format!("生成処理に失敗しました: {e}"))??;
+
+    {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().unwrap();
+        plan_store::save_review(&conn, &today, &model, &review)?;
+    }
+
+    let state = app.state::<AppState>();
+    let conn = state.db.lock().unwrap();
+    plan_store::latest_review(&conn, &today)?
+        .ok_or("レビューの保存に失敗しました。".into())
+}
+
+/// 今日の保存済みレビュー (ローカル、即時)。
+#[tauri::command]
+pub fn get_daily_review(
+    state: State<'_, AppState>,
+) -> CmdResult<Option<plan_store::StoredReview>> {
+    let conn = state.db.lock().unwrap();
+    plan_store::latest_review(&conn, &crate::domain::time::today_jst())
 }

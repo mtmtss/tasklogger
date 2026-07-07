@@ -11,6 +11,7 @@ import { useCandidates, useDashboard } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
 import DailyPlanCard from "../components/DailyPlanCard";
+import DailyReviewCard from "../components/DailyReviewCard";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
@@ -200,6 +201,8 @@ export default function TodayPage() {
           )}
         </div>
       </div>
+
+      <DailyReviewCard onError={setError} />
     </section>
   );
 }
