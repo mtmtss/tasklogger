@@ -1,4 +1,4 @@
-# TaskLogger AI 拡張 仕様書 — 「今日の作戦」生成
+﻿# TaskLogger AI 拡張 仕様書 — 「今日の作戦」生成
 
 - 版: 1.0
 - 作成日: 2026-07-07
@@ -42,7 +42,7 @@
 | MVP スコープ | **今日の作戦生成のみ**。Inbox+AI 整理 / 日次レビュー / 研究アイデア DB は将来拡張(§10) |
 | タスク基盤 | **Google Tasks に統一**(TickTick 連携はしない。TickTick からは移行) |
 | 音声入力 | **Windows 標準音声入力(Win+H)を活用**。アプリ内のテキスト欄に OS 機能で喋って入力する。専用音声パイプラインは将来拡張 |
-| LLM | **Claude API**(Anthropic)。既定モデル `claude-opus-4-8` |
+| LLM | **Gemini API**(Google)。既定モデル `gemini-2.5-flash`(無料枠運用可) |
 
 ---
 
@@ -57,11 +57,11 @@
 │  [新] 今日の作戦カード         │                    │ 読取専用            │
 │      └ generate_daily_plan ──┴──> [新] ai モジュール                    │
 │                                     ├ context_builder (SQLite→文脈生成) │
-│                                     ├ claude_api (Messages API 呼出)    │
+│                                     ├ gemini_api (generateContent 呼出)    │
 │                                     └ daily_plans (結果保存)            │
 └──────────────────────────────────┬────────────────────────────────────┘
                                    │ HTTPS (生成時のみ)
-                            Anthropic Claude API
+                            Google Gemini API
 ```
 
 - **ローカルファースト原則は不変**: タスク操作・記録・集計は従来どおりローカル完結。
@@ -73,8 +73,8 @@
 
 ```text
 src-tauri/src/ai/
-├── mod.rs              # コマンド定義 (generate_daily_plan, set_anthropic_api_key など)
-├── claude_api.rs       # Messages API クライアント (reqwest blocking, structured outputs)
+├── mod.rs              # コマンド定義 (generate_daily_plan, set_ai_api_key など)
+├── gemini_api.rs       # Gemini API クライアント (reqwest blocking, responseSchema で JSON 保証)
 ├── context_builder.rs  # SQLite から入力コンテキストを収集・整形
 └── plan_store.rs       # daily_plans テーブルの保存・取得
 ```
@@ -142,7 +142,7 @@ src-tauri/src/ai/
 - `must_do` は 1〜3 件。**重いタスクはタスクそのものではなく「最初の一手」を提示**する
 - `estimatedMinutes` は過去実績を優先し、なければ AI の推定
 - `not_today` は「安心して退避する」ためのセクション。理由を必ず付ける
-- 出力スキーマは `output_config.format`(json_schema)で強制し、パース失敗をなくす
+- 出力スキーマは Gemini の `responseSchema` で強制し、パース失敗をなくす
 
 ## 3.4 UI(今日ページ)
 
@@ -160,68 +160,74 @@ src-tauri/src/ai/
 
 | コマンド | 内容 |
 | --- | --- |
-| `generate_daily_plan(note: string)` | コンテキスト収集 → Claude API → 検証済み JSON を保存して返す(async) |
+| `generate_daily_plan(note: string)` | コンテキスト収集 → Gemini API → 検証済み JSON を保存して返す(async) |
 | `get_daily_plan()` | 今日の最新プランを daily_plans から取得(ローカル、即時) |
 | `schedule_for_today(task)` | due=today 化のみ(`set_task_due_today_locally` + sync enqueue の流用) |
-| `set_anthropic_api_key(key)` / `clear_anthropic_api_key()` | keyring への保存・削除 |
+| `set_ai_api_key(key)` / `clear_ai_api_key()` | keyring への保存・削除 |
 | `get_ai_status()` | { configured, model } (キーの有無のみ。キー本体は返さない) |
 
 ---
 
-# 4. Claude API 連携仕様
+# 4. Gemini API 連携仕様
+
+LLM は **Gemini API**(Google Generative Language API)を用いる。
+選定理由: (1) Google AI Studio のキーで**無料枠運用が可能**(コスト面の決定要因)、
+(2) Google アカウント・GCP は Tasks 連携で導入済み、(3) GAS 版でも Gemini を利用していた連続性。
 
 ## 4.1 モデルとパラメータ
 
 | 項目 | 値 |
 | --- | --- |
-| 既定モデル | `claude-opus-4-8`(設定 `ai_model` で変更可。選択肢: opus-4-8 / sonnet-5 / haiku-4-5) |
-| thinking | `{"type": "adaptive"}`(明示指定) |
-| max_tokens | 4096 |
-| 出力形式 | `output_config.format`(json_schema、§3.3 のスキーマ) |
-| サンプリング | temperature 等は指定しない(Opus 4.8 では 400 になるため) |
-| タイムアウト | 180 秒(adaptive thinking の余裕を見る) |
+| 既定モデル | `gemini-2.5-flash`(設定 `ai_model` で変更可。選択肢: 2.5-flash / 2.5-flash-lite / 2.5-pro) |
+| エンドポイント | `POST /v1beta/models/{model}:generateContent`(キーは `x-goog-api-key` ヘッダ) |
+| 出力形式 | `generationConfig.responseMimeType: "application/json"` + `responseSchema`(§3.3 のスキーマ。Gemini の OpenAPI 風形式) |
+| maxOutputTokens | 8192(thinking 分の余裕込み) |
+| thinking | 既定(dynamic)。明示設定しない |
+| タイムアウト | 180 秒 |
 | リトライ | 429 / 5xx は 1 回リトライ(SDK なし・reqwest 直叩きのため自前) |
 
-## 4.2 プロンプト構成とキャッシュ
+## 4.2 プロンプト構成
 
 ```text
-system:
+systemInstruction:
   [固定] 役割定義(実績に基づく現実的な計画を立てるコーチ。過剰計画を戒める方針)
   [固定] 出力ルール(最初の一手への分解、実績ベース見積もり、退避理由の必須化)
-  [準固定] ユーザープロファイル (ai_user_context) ← cache_control breakpoint
-user:
+  [準固定] ユーザープロファイル (ai_user_context)
+contents (user):
   [可変] タスク状況 + 実績データ + 当日の状態 + 現在日時
 ```
 
-- system 末尾に `cache_control: {"type": "ephemeral"}` を置き、再生成・翌日の生成でキャッシュを効かせる
-- 可変データは必ず user 側に置き、system は日をまたいでもバイト同一に保つ
+- Gemini 2.5 系は implicit caching が自動適用されるため、明示のキャッシュ制御は行わない
+- 可変データは必ず user 側に置き、systemInstruction は日をまたいでも安定に保つ
 
 ## 4.3 API キー管理
 
-- キーは **Windows 資格情報マネージャー(keyring)** に保存(service "TaskLogger", user "anthropic_api_key")。SQLite・設定ファイルには置かない(既存の refresh token と同じ方針)
-- 設定ページに入力欄(パスワード型)+ 接続テストボタン(models API `GET /v1/models/{model}` で疎通確認)
+- キーは [Google AI Studio](https://aistudio.google.com/) で発行(無料、クレジットカード不要)
+- **Windows 資格情報マネージャー(keyring)** に保存(service "TaskLogger", user "gemini_api_key")。SQLite・設定ファイルには置かない(既存の refresh token と同じ方針)
+- 設定ページに入力欄(パスワード型)。保存時に models API `GET /v1beta/models/{model}` で疎通確認
 - キー未設定時は AI 機能全体が無効(明示的オプトイン)
 
 ## 4.4 コスト目安(仕様書に明記してユーザーが判断できるように)
 
 1 回の生成 ≒ 入力 3〜5K トークン + 出力 1K トークン:
 
-| モデル | 1回あたり | 毎日 2 回 × 30 日 |
+| モデル | 無料枠 | 有料時の目安 (1回 / 毎日2回×30日) |
 | --- | --- | --- |
-| claude-opus-4-8 ($5/$25 per MTok) | 約 $0.05 | 約 $3/月 |
-| claude-sonnet-5 ($3/$15) | 約 $0.03 | 約 $2/月 |
-| claude-haiku-4-5 ($1/$5) | 約 $0.01 | 約 $0.6/月 |
+| gemini-2.5-flash (既定) | **あり**(1日あたりのリクエスト上限内なら $0) | 約 $0.005 / 約 $0.3/月 |
+| gemini-2.5-flash-lite | あり | 約 $0.002 / 約 $0.1/月 |
+| gemini-2.5-pro | 限定的 | 約 $0.02 / 約 $1/月 |
 
-プロンプトキャッシュが効けば入力コストはさらに下がる。既定は品質優先で opus-4-8。
+1 日数回の作戦生成なら **flash の無料枠に収まる想定**(上限超過時は 429 → 時間を置いて再試行)。
 
 ## 4.5 エラー処理
 
 | 状況 | 挙動 |
 | --- | --- |
 | ネットワーク不通 / タイムアウト | カードにエラー表示 + 再試行ボタン。他機能に影響なし |
-| 401(キー無効) | 「API キーを確認してください」+ 設定ページへの導線 |
-| 429 / 529 | 1 回リトライ後、時間を置くよう案内 |
-| `stop_reason: "refusal"` / スキーマ外応答 | 汎用エラー表示(タスク内容起因のためユーザーに再生成を促す) |
+| 400/401/403(キー無効) | 「API キーを確認してください」+ 設定ページへの導線 |
+| 429(無料枠上限含む) | 1 回リトライ後、時間を置くよう案内 |
+| 5xx | 1 回リトライ後、時間を置くよう案内 |
+| `promptFeedback.blockReason` / `finishReason != STOP` / スキーマ外応答 | 汎用エラー表示(内容起因のためユーザーに再生成を促す) |
 
 ---
 
@@ -248,7 +254,7 @@ CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
 
 | キー | 内容 |
 | --- | --- |
-| `ai_model` | 既定 `claude-opus-4-8` |
+| `ai_model` | 既定 `gemini-2.5-flash` |
 | `ai_user_context` | 固定プロファイル自由記述 |
 | `ai_auto_plan` | "true" でその日初回起動時に自動生成(既定 false) |
 
@@ -256,9 +262,9 @@ CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
 
 # 6. プライバシーとセキュリティ
 
-- 生成時に **タスクのタイトル・メモ・作業実績の要約が Anthropic API に送信される**。
+- 生成時に **タスクのタイトル・メモ・作業実績の要約が Google の Gemini API に送信される**。
   設定ページの AI セクションにこの旨を明記し、キー設定 = 同意とする(明示的オプトイン)
-- Anthropic API の入力は同社ポリシーに基づき保持される(Claude Opus は標準 30 日)。研究上の機微情報をタスクメモに書いている場合の注意を README に記載
+- **無料枠(AI Studio キー)では入力がサービス改善に利用され得る**(Google の規約による)。研究上の機微情報を扱う場合は課金を有効にしたキー(有料枠はサービス改善への利用なし)の使用を推奨。この注意を設定 UI と README に明記
 - API キーは keyring のみ。ログ・エラーメッセージにキーを含めない
 - 送信するのは §3.2 のコンテキストのみ。work_logs の生データ全件は送らない(集計値と直近分のみ)
 
@@ -277,7 +283,7 @@ CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
 
 | M | 内容 | 完了条件 |
 | --- | --- | --- |
-| E1 | AI 基盤: claude_api.rs(structured outputs 対応)、keyring キー管理、設定ページ AI セクション(キー入力・接続テスト・モデル選択・プロファイル編集) | 接続テストが通る。単体テスト = リクエスト組立とレスポンス解析 |
+| E1 | AI 基盤: gemini_api.rs(structured outputs 対応)、keyring キー管理、設定ページ AI セクション(キー入力・接続テスト・モデル選択・プロファイル編集) | 接続テストが通る。単体テスト = リクエスト組立とレスポンス解析 |
 | E2 | context_builder + daily_plans: 入力コンテキスト収集(タスク・実績・null 時間)、プラン保存・復元 | 収集コンテキストのスナップショットテスト。モック応答でプラン保存まで動く |
 | E3 | 今日の作戦カード UI + アクション(今すぐやる / 今日やるに入れる = schedule_for_today) | 実 API で生成 → 提案からタスク開始まで一連動作 |
 | E4 | 磨き込み: 自動生成オプション、再生成、エラー処理、コスト表示(使用トークン数) | 日常運用開始 |
@@ -316,7 +322,7 @@ MVP(今日の作戦)の運用が安定したら、プロファイル分析の優
 ```text
 TaskLogger が記録してきた実績(実働時間・null 時間・中断パターン)
         ↓
-Claude API が締切・停滞・当日の状態と合わせて判断
+Gemini API が締切・停滞・当日の状態と合わせて判断
         ↓
 必ずやる 1〜3 件(最初の一手つき)+ 安心して退避できる「今日やらない」
         ↓

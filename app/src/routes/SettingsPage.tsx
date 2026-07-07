@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  clearAnthropicApiKey,
+  clearAiApiKey,
   connectGoogle,
   disconnectGoogle,
   exportCsv,
@@ -9,7 +9,7 @@ import {
   getSettings,
   importGasCsv,
   seedSampleData,
-  setAnthropicApiKey,
+  setAiApiKey,
   setAutostart,
   setSetting,
 } from "../lib/commands";
@@ -224,7 +224,7 @@ function AiSection() {
   const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("claude-opus-4-8");
+  const [model, setModel] = useState("gemini-2.5-flash");
   const [userContext, setUserContext] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -245,7 +245,7 @@ function AiSection() {
   const handleSaveKey = () => {
     setMessage(null);
     setSaving(true);
-    setAnthropicApiKey(apiKey)
+    setAiApiKey(apiKey)
       .then(() => {
         setMessage("接続を確認して保存しました。今日ページに「今日の作戦」カードが表示されます。");
         setApiKey("");
@@ -258,7 +258,7 @@ function AiSection() {
   };
 
   const handleClearKey = () => {
-    clearAnthropicApiKey()
+    clearAiApiKey()
       .then(() => setMessage("API キーを削除しました。AI 機能は無効になります。"))
       .catch((e) => setMessage(String(e)))
       .finally(refresh);
@@ -278,7 +278,7 @@ function AiSection() {
     <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-300">
-          AI「今日の作戦」(Claude API)
+          AI「今日の作戦」(Gemini API)
         </h2>
         <span
           className={`text-xs ${configured ? "text-emerald-400" : "text-slate-500"}`}
@@ -287,8 +287,11 @@ function AiSection() {
         </span>
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        有効にすると、生成時にタスクのタイトル・メモ・作業実績の要約が Anthropic
-        API に送信されます (キーの設定 = 同意)。キーは Windows
+        キーは Google AI Studio (aistudio.google.com) で無料発行できます。
+        有効にすると、生成時にタスクのタイトル・メモ・作業実績の要約が Google の
+        Gemini API に送信されます (キーの設定 = 同意)。
+        無料枠ではデータがサービス改善に利用される場合があります —
+        機微な内容を扱う場合は課金を有効にしたキーを推奨。キーは Windows
         資格情報マネージャーにのみ保存されます。
       </p>
 
@@ -297,7 +300,7 @@ function AiSection() {
           <input
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Anthropic API キー (sk-ant-…)"
+            placeholder="Gemini API キー (AIza…)"
             type="password"
             className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
           />
@@ -326,9 +329,9 @@ function AiSection() {
             onChange={(e) => handleModel(e.target.value)}
             className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
           >
-            <option value="claude-opus-4-8">claude-opus-4-8 (品質優先・約$0.05/回)</option>
-            <option value="claude-sonnet-5">claude-sonnet-5 (バランス・約$0.03/回)</option>
-            <option value="claude-haiku-4-5">claude-haiku-4-5 (低コスト・約$0.01/回)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (推奨・無料枠あり)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
+            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (最速・最安)</option>
           </select>
         </label>
         <div>

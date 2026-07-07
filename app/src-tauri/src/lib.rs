@@ -190,8 +190,8 @@ pub fn run() {
             google::sync_now,
             google::get_sync_status,
             ai::get_ai_status,
-            ai::set_anthropic_api_key,
-            ai::clear_anthropic_api_key,
+            ai::set_ai_api_key,
+            ai::clear_ai_api_key,
             ai::generate_daily_plan,
             ai::get_daily_plan,
         ])

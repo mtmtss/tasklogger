@@ -1,8 +1,9 @@
 //! AI 拡張「今日の作戦」(docs/ai-extension-specification.md)。
 //! ローカルファースト原則の外側にある付加機能: 失敗しても他機能に影響しない。
+//! LLM は Gemini API (Google AI Studio キー、無料枠で運用可)。
 
-pub mod claude_api;
 pub mod context_builder;
+pub mod gemini_api;
 pub mod plan_store;
 
 use serde::Serialize;
@@ -23,25 +24,22 @@ fn current_model(conn: &rusqlite::Connection) -> String {
     repos::get_setting(conn, "ai_model")
         .ok()
         .flatten()
-        .filter(|m| claude_api::ALLOWED_MODELS.contains(&m.as_str()))
-        .unwrap_or_else(|| claude_api::DEFAULT_MODEL.to_string())
+        .filter(|m| gemini_api::ALLOWED_MODELS.contains(&m.as_str()))
+        .unwrap_or_else(|| gemini_api::DEFAULT_MODEL.to_string())
 }
 
 #[tauri::command]
 pub fn get_ai_status(state: State<'_, AppState>) -> CmdResult<AiStatus> {
     let conn = state.db.lock().unwrap();
     Ok(AiStatus {
-        configured: claude_api::load_api_key().is_some(),
+        configured: gemini_api::load_api_key().is_some(),
         model: current_model(&conn),
     })
 }
 
 /// API キーを保存し、接続テストまで行う (キー設定 = AI 機能へのオプトイン, 仕様 §6)。
 #[tauri::command]
-pub async fn set_anthropic_api_key(
-    app: tauri::AppHandle,
-    key: String,
-) -> CmdResult<()> {
+pub async fn set_ai_api_key(app: tauri::AppHandle, key: String) -> CmdResult<()> {
     let key = key.trim().to_string();
     if key.is_empty() {
         return Err("API キーを入力してください。".into());
@@ -52,15 +50,15 @@ pub async fn set_anthropic_api_key(
         current_model(&conn)
     };
     let test_key = key.clone();
-    tauri::async_runtime::spawn_blocking(move || claude_api::test_connection(&test_key, &model))
+    tauri::async_runtime::spawn_blocking(move || gemini_api::test_connection(&test_key, &model))
         .await
         .map_err(|e| e.to_string())??;
-    claude_api::save_api_key(&key)
+    gemini_api::save_api_key(&key)
 }
 
 #[tauri::command]
-pub fn clear_anthropic_api_key() -> CmdResult<()> {
-    claude_api::delete_api_key();
+pub fn clear_ai_api_key() -> CmdResult<()> {
+    gemini_api::delete_api_key();
     Ok(())
 }
 
@@ -70,7 +68,7 @@ pub async fn generate_daily_plan(
     app: tauri::AppHandle,
     note: String,
 ) -> CmdResult<plan_store::StoredPlan> {
-    let api_key = claude_api::load_api_key()
+    let api_key = gemini_api::load_api_key()
         .ok_or("API キーが未設定です。設定ページで入力してください。")?;
 
     // コンテキスト収集 (ロックは収集の間だけ保持し、API 呼出中は解放する)
@@ -87,7 +85,7 @@ pub async fn generate_daily_plan(
 
     let plan_model = model.clone();
     let plan = tauri::async_runtime::spawn_blocking(move || {
-        claude_api::generate_plan(&api_key, &plan_model, &user_context, &payload)
+        gemini_api::generate_plan(&api_key, &plan_model, &user_context, &payload)
     })
     .await
     .map_err(|e| format!("生成処理に失敗しました: {e}"))??;

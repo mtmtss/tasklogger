@@ -101,11 +101,10 @@ export interface AiStatus {
 
 export const getAiStatus = () => invoke<AiStatus>("get_ai_status");
 
-export const setAnthropicApiKey = (key: string) =>
-  invoke<void>("set_anthropic_api_key", { key });
+export const setAiApiKey = (key: string) =>
+  invoke<void>("set_ai_api_key", { key });
 
-export const clearAnthropicApiKey = () =>
-  invoke<void>("clear_anthropic_api_key");
+export const clearAiApiKey = () => invoke<void>("clear_ai_api_key");
 
 export const generateDailyPlan = (note: string) =>
   invoke<StoredPlan>("generate_daily_plan", { note });
