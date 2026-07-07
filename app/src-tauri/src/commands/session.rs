@@ -198,6 +198,36 @@ pub fn dismiss_interrupted(app: tauri::AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+/// 今日やるに入れる (AI 拡張仕様 §3.4): due=today 化のみ。開始はしない。
+#[tauri::command]
+pub fn schedule_for_today(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task: TaskRef,
+) -> CmdResult<()> {
+    {
+        let conn = state.db.lock().unwrap();
+        let row = repos::get_task(&conn, &task.task_list_id, &task.task_id)
+            .map_err(db_err)?
+            .ok_or("タスクが見つかりません。")?;
+
+        let tx = conn.unchecked_transaction().map_err(db_err)?;
+        repos::set_task_due_today_locally(&tx, &row.task_list_id, &row.id).map_err(db_err)?;
+        repos::enqueue_sync_op(
+            &tx,
+            "set_due_today",
+            &row.task_list_id,
+            &row.id,
+            &serde_json::json!({"due": time::today_due_value()}).to_string(),
+        )
+        .map_err(db_err)?;
+        tx.commit().map_err(db_err)?;
+    }
+    emit_tasks_changed(&app);
+    crate::google::kick_sync(&app);
+    Ok(())
+}
+
 /// 今すぐやる (spec §5.3): due=today 化 + 即開始。別タスク running 中はブロック。
 #[tauri::command]
 pub fn do_it_now(

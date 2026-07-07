@@ -78,6 +78,29 @@ const MIGRATIONS: &[&str] = &[
       value TEXT NOT NULL
     );
     "#,
+    // v2: AI 拡張「今日の作戦」の履歴 (docs/ai-extension-specification.md §5.1)
+    r#"
+    CREATE TABLE daily_plans (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_date    TEXT NOT NULL,
+      generated_at TEXT NOT NULL,
+      input_note   TEXT NOT NULL DEFAULT '',
+      model        TEXT NOT NULL,
+      plan_json    TEXT NOT NULL
+    );
+    CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
+    "#,
+    // v3: AI 拡張「日次レビュー」の履歴 (docs/ai-extension-specification.md §10 第2弾)
+    r#"
+    CREATE TABLE daily_reviews (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      review_date   TEXT NOT NULL,
+      generated_at  TEXT NOT NULL,
+      model         TEXT NOT NULL,
+      review_json   TEXT NOT NULL
+    );
+    CREATE INDEX idx_daily_reviews_date ON daily_reviews(review_date);
+    "#,
 ];
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {
