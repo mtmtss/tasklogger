@@ -16,6 +16,9 @@ export const completeTaskDirect = (task: TaskRef, memo?: string) =>
 
 export const doItNow = (task: TaskRef) => invoke<void>("do_it_now", { task });
 
+export const updateTaskDue = (task: TaskRef, due: string | null) =>
+  invoke<void>("update_task_due", { task, due });
+
 export const getSettings = () =>
   invoke<Record<string, string>>("get_settings");
 

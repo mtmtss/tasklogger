@@ -1,18 +1,28 @@
+import { useState } from "react";
 import type { TaskItem } from "../types";
 import { formatMinutes } from "../lib/format";
 import StatusChip from "./StatusChip";
+import DueDatePrompt from "./DueDatePrompt";
 
 interface Props {
   task: TaskItem;
   onStart: (task: TaskItem) => void;
   onPause: () => void;
   onComplete: (task: TaskItem) => void;
+  onUpdateDue: (task: TaskItem, due: string | null) => void;
 }
 
 /** 今日リストの 1 タスク。状態に応じたボタンを出す (spec §5.1)。 */
-export default function TaskCard({ task, onStart, onPause, onComplete }: Props) {
+export default function TaskCard({
+  task,
+  onStart,
+  onPause,
+  onComplete,
+  onUpdateDue,
+}: Props) {
   const isRunning = task.appStatus === "running";
   const isCompleted = task.appStatus === "completed";
+  const [showDuePrompt, setShowDuePrompt] = useState(false);
 
   return (
     <div
@@ -28,6 +38,11 @@ export default function TaskCard({ task, onStart, onPause, onComplete }: Props) 
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <StatusChip status={task.appStatus} />
+            {task.isOverdue && !isCompleted && (
+              <span className="inline-block rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-300">
+                期限切れ
+              </span>
+            )}
             <span
               className={`truncate font-medium ${isCompleted ? "line-through text-slate-500" : ""}`}
             >
@@ -69,9 +84,25 @@ export default function TaskCard({ task, onStart, onPause, onComplete }: Props) 
                 <ActionButton onClick={() => onComplete(task)}>完了</ActionButton>
               </>
             )}
+            {task.isOverdue && (
+              <ActionButton onClick={() => setShowDuePrompt(true)}>
+                期限を変更
+              </ActionButton>
+            )}
           </div>
         )}
       </div>
+      {showDuePrompt && (
+        <DueDatePrompt
+          taskTitle={task.title}
+          currentDue={task.due}
+          onCancel={() => setShowDuePrompt(false)}
+          onConfirm={(due) => {
+            setShowDuePrompt(false);
+            onUpdateDue(task, due);
+          }}
+        />
+      )}
     </div>
   );
 }

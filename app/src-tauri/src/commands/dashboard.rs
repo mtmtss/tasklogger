@@ -25,7 +25,7 @@ pub fn get_today_dashboard(state: State<'_, AppState>) -> CmdResult<TodayDashboa
     let open_tasks = repos::fetch_open_tasks(&conn).map_err(db_err)?;
     let today_tasks: Vec<_> = open_tasks
         .into_iter()
-        .filter(|t| time::is_due_today(&t.due))
+        .filter(|t| time::is_due_today(&t.due) || t.today_flag)
         .collect();
 
     let task_groups = group_tasks(today_tasks, &stats);
@@ -102,7 +102,7 @@ pub fn get_candidates(state: State<'_, AppState>) -> CmdResult<Vec<TaskGroup>> {
     let open_tasks = repos::fetch_open_tasks(&conn).map_err(db_err)?;
     let candidates: Vec<_> = open_tasks
         .into_iter()
-        .filter(|t| !time::is_due_today(&t.due))
+        .filter(|t| !time::is_due_today(&t.due) && !t.today_flag)
         .collect();
     Ok(group_tasks(candidates, &Default::default()))
 }
@@ -114,6 +114,7 @@ fn group_tasks(
     let mut groups: BTreeMap<(String, String), Vec<TaskItem>> = BTreeMap::new();
     for row in rows {
         let (secs, app_status, _) = status::lookup(stats, &row.task_list_id, &row.id);
+        let is_overdue = time::is_overdue(&row.due);
         groups
             .entry((row.task_list_title.clone(), row.task_list_id.clone()))
             .or_default()
@@ -128,6 +129,7 @@ fn group_tasks(
                 app_status,
                 today_duration_seconds: secs,
                 today_duration_minutes: time::ceil_minutes(secs),
+                is_overdue,
             });
     }
     groups

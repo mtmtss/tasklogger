@@ -24,6 +24,8 @@ pub struct TaskItem {
     pub app_status: AppStatus,
     pub today_duration_seconds: i64,
     pub today_duration_minutes: i64,
+    /// due が今日より前かどうか (期限切れバッジ表示用)。
+    pub is_overdue: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

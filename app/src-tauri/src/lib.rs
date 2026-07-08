@@ -171,6 +171,7 @@ pub fn run() {
             commands::session::stop_task,
             commands::session::complete_task_direct,
             commands::session::do_it_now,
+            commands::session::update_task_due,
             commands::session::get_interrupted_task,
             commands::session::resume_interrupted,
             commands::session::dismiss_interrupted,

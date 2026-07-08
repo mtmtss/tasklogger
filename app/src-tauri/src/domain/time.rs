@@ -48,3 +48,24 @@ pub fn is_due_today(due: &Option<String>) -> bool {
         None => false,
     }
 }
+
+/// due 文字列の先頭 10 文字が今日より前 (期限切れ) かどうか。
+pub fn is_overdue(due: &Option<String>) -> bool {
+    match due {
+        Some(d) => d.len() >= 10 && &d[0..10] < today_jst().as_str(),
+        None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_overdue_cases() {
+        assert!(!is_overdue(&None));
+        assert!(!is_overdue(&Some(format!("{}T00:00:00.000Z", today_jst()))));
+        assert!(is_overdue(&Some("2000-01-01T00:00:00.000Z".to_string())));
+        assert!(!is_overdue(&Some("2999-01-01T00:00:00.000Z".to_string())));
+    }
+}
