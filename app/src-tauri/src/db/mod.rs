@@ -101,6 +101,20 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX idx_daily_reviews_date ON daily_reviews(review_date);
     "#,
+    // v4: クイックキャプチャ + Inbox (docs/ai-extension-specification.md §13)
+    r#"
+    CREATE TABLE captures (
+      id                  TEXT PRIMARY KEY,
+      text                TEXT NOT NULL,
+      status              TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending','classified','registered','dismissed')),
+      ai_result           TEXT,
+      created_at          TEXT NOT NULL,
+      processed_at        TEXT,
+      registered_task_ids TEXT
+    );
+    CREATE INDEX idx_captures_status ON captures(status, created_at);
+    "#,
 ];
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {

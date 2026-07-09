@@ -2,6 +2,7 @@
 //! ローカルファースト原則の外側にある付加機能: 失敗しても他機能に影響しない。
 //! LLM は Gemini API (Google AI Studio キー、無料枠で運用可)。
 
+pub mod capture;
 pub mod context_builder;
 pub mod gemini_api;
 pub mod plan_store;
@@ -21,7 +22,7 @@ pub struct AiStatus {
     pub model: String,
 }
 
-fn current_model(conn: &rusqlite::Connection) -> String {
+pub(crate) fn current_model(conn: &rusqlite::Connection) -> String {
     repos::get_setting(conn, "ai_model")
         .ok()
         .flatten()

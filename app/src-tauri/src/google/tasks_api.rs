@@ -141,6 +141,38 @@ pub fn patch_task(
     Ok(())
 }
 
+/// tasks.insert (AI 拡張仕様 §13.9)。作成されたタスク (Google 発番 ID) を返す。
+pub fn insert_task(
+    token: &str,
+    task_list_id: &str,
+    body: &serde_json::Value,
+) -> Result<GTask, ApiError> {
+    let client = client()?;
+    let response = client
+        .post(format!("{BASE}/lists/{task_list_id}/tasks"))
+        .bearer_auth(token)
+        .json(body)
+        .send()
+        .map_err(net_err)?;
+    check(response)?
+        .json()
+        .map_err(|e| ApiError::Other(e.to_string()))
+}
+
+/// tasklists.insert。「研究アイデア」「Someday」リストの自動作成に使う (AI 拡張仕様 §13.5)。
+pub fn insert_tasklist(token: &str, title: &str) -> Result<GTaskList, ApiError> {
+    let client = client()?;
+    let response = client
+        .post(format!("{BASE}/users/@me/lists"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "title": title }))
+        .send()
+        .map_err(net_err)?;
+    check(response)?
+        .json()
+        .map_err(|e| ApiError::Other(e.to_string()))
+}
+
 fn net_err(e: reqwest::Error) -> ApiError {
     ApiError::Other(format!("ネットワークエラー: {e}"))
 }

@@ -45,6 +45,28 @@ const REVIEW_SYSTEM: &str = "\
 - summary は 1〜3 文の総括。計画と実績の乖離があれば一言触れ、明日への現実的な一歩を添える\n\
 - すべて日本語で、励ましつつ淡々と書く";
 
+/// 「Inbox 整理」の役割定義 (AI 拡張仕様 §13.4)。
+const CLASSIFY_SYSTEM: &str = "\
+あなたはタスク管理アプリ TaskLogger の「Inbox 整理」アシスタントである。\
+ユーザーが思いついた瞬間に音声・テキストで放り込んだメモを受け取り、\
+ワンクリック承認だけで登録できる形に整理して提案する。\n\
+\n\
+原則:\n\
+- メモを 1〜3 件の項目 (items) に分解する。実行タスクと研究アイデアが混ざっていれば必ず分ける\n\
+- kind の判定基準:\n\
+  - TASK: 具体的な行動で、近いうちに実行すべきもの\n\
+  - RESEARCH_IDEA: 研究のアイデア・仮説・調べたいこと (すぐ動くのではなく育てるもの)\n\
+  - LIFE_ADMIN: 生活・事務の用事\n\
+  - SOMEDAY: いつかやりたいが今動く必要のないもの\n\
+  - UNCLEAR: 判断がつかないもの。無理にタスク化しない\n\
+- title は簡潔な命令形 (例:「関連研究を3本探す」)。内容が重い場合は今日踏み出せる最初の一手を title にする\n\
+- firstStep は着手のきっかけになる具体的な一手 (title と同じなら null)\n\
+- listName: TASK / LIFE_ADMIN は既存のタスクリスト名から最適なものを選ぶ。\
+RESEARCH_IDEA は「研究アイデア」、SOMEDAY は「Someday」、UNCLEAR は null にする\n\
+- due はメモに期限・日付表現が明確にあるときだけ YYYY-MM-DD で返し、なければ null\n\
+- note は登録時にタスクの詳細欄へ入る補足 (メモの文脈を短く要約。不要なら null)\n\
+- すべて日本語で書く";
+
 /// 出力スキーマ (AI 拡張仕様 §3.3)。Gemini の responseSchema 形式 (OpenAPI 風、型は大文字)。
 fn plan_schema() -> Value {
     let task_item = json!({
@@ -116,6 +138,34 @@ fn review_schema() -> Value {
             "summary": {"type": "STRING"}
         },
         "required": ["done", "incomplete", "tomorrow", "research_progress", "summary"]
+    })
+}
+
+/// Inbox 分類の出力スキーマ (AI 拡張仕様 §13.4)。
+fn classify_schema() -> Value {
+    json!({
+        "type": "OBJECT",
+        "properties": {
+            "items": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "kind": {
+                            "type": "STRING",
+                            "enum": ["TASK", "RESEARCH_IDEA", "LIFE_ADMIN", "SOMEDAY", "UNCLEAR"]
+                        },
+                        "title": {"type": "STRING"},
+                        "listName": {"type": "STRING", "nullable": true},
+                        "due": {"type": "STRING", "nullable": true},
+                        "firstStep": {"type": "STRING", "nullable": true},
+                        "note": {"type": "STRING", "nullable": true}
+                    },
+                    "required": ["kind", "title"]
+                }
+            }
+        },
+        "required": ["items"]
     })
 }
 
@@ -219,6 +269,16 @@ pub fn generate_review(
     payload: &str,
 ) -> Result<Value, String> {
     generate(api_key, model, REVIEW_SYSTEM, user_context, review_schema(), payload)
+}
+
+/// キャプチャを分類 (blocking, AI 拡張仕様 §13.4)。
+pub fn generate_classification(
+    api_key: &str,
+    model: &str,
+    user_context: &str,
+    payload: &str,
+) -> Result<Value, String> {
+    generate(api_key, model, CLASSIFY_SYSTEM, user_context, classify_schema(), payload)
 }
 
 /// 汎用生成 (blocking)。429/5xx は 1 回だけリトライする。

@@ -341,6 +341,189 @@ pub fn delete_setting(conn: &Connection, key: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+// ---- クイックキャプチャ + Inbox (AI 拡張仕様 §13) ----
+
+pub struct CaptureRow {
+    pub id: String,
+    pub text: String,
+    pub status: String,
+    pub ai_result: Option<String>,
+    pub created_at: String,
+}
+
+pub fn insert_capture(conn: &Connection, text: &str) -> rusqlite::Result<String> {
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO captures (id, text, created_at) VALUES (?1, ?2, ?3)",
+        params![id, text, time::to_iso(&time::now_utc())],
+    )?;
+    Ok(id)
+}
+
+pub fn get_capture(conn: &Connection, id: &str) -> rusqlite::Result<Option<CaptureRow>> {
+    conn.query_row(
+        "SELECT id, text, status, ai_result, created_at FROM captures WHERE id = ?1",
+        params![id],
+        capture_from_row,
+    )
+    .optional()
+}
+
+/// Inbox に表示する未処理キャプチャ (pending + classified) を新しい順に。
+pub fn fetch_inbox_captures(conn: &Connection) -> rusqlite::Result<Vec<CaptureRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, text, status, ai_result, created_at FROM captures
+         WHERE status IN ('pending','classified')
+         ORDER BY created_at DESC",
+    )?;
+    let rows = stmt
+        .query_map([], capture_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+fn capture_from_row(row: &rusqlite::Row) -> rusqlite::Result<CaptureRow> {
+    Ok(CaptureRow {
+        id: row.get(0)?,
+        text: row.get(1)?,
+        status: row.get(2)?,
+        ai_result: row.get(3)?,
+        created_at: row.get(4)?,
+    })
+}
+
+pub fn inbox_count(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM captures WHERE status IN ('pending','classified')",
+        [],
+        |row| row.get(0),
+    )
+}
+
+/// AI 分類結果を保存する。登録/破棄済みには適用しない。
+pub fn set_capture_classification(conn: &Connection, id: &str, json: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE captures SET ai_result = ?2, status = 'classified'
+         WHERE id = ?1 AND status IN ('pending','classified')",
+        params![id, json],
+    )?;
+    Ok(())
+}
+
+/// 項目登録の途中経過を ai_result に書き戻す (registeredTaskId の記録)。
+pub fn update_capture_ai_result(conn: &Connection, id: &str, json: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE captures SET ai_result = ?2 WHERE id = ?1",
+        params![id, json],
+    )?;
+    Ok(())
+}
+
+/// キャプチャを終了状態 (registered / dismissed) にする。行は消さない (仕様 §13.7)。
+pub fn finish_capture(
+    conn: &Connection,
+    id: &str,
+    status: &str,
+    registered_task_ids: &[String],
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE captures SET status = ?2, processed_at = ?3, registered_task_ids = ?4
+         WHERE id = ?1",
+        params![
+            id,
+            status,
+            time::to_iso(&time::now_utc()),
+            serde_json::to_string(registered_task_ids).unwrap_or_else(|_| "[]".into()),
+        ],
+    )?;
+    Ok(())
+}
+
+pub struct TaskListRow {
+    pub id: String,
+    pub title: String,
+}
+
+pub fn fetch_task_lists(conn: &Connection) -> rusqlite::Result<Vec<TaskListRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title FROM task_lists WHERE deleted = 0 ORDER BY title",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(TaskListRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+pub fn find_task_list_by_title(conn: &Connection, title: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT id FROM task_lists WHERE deleted = 0 AND title = ?1",
+        params![title],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// tasklists.insert の結果をローカルキャッシュへ反映する。
+pub fn insert_task_list_row(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+    updated: Option<&str>,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO task_lists (id, title, updated, deleted, fetched_at)
+         VALUES (?1, ?2, ?3, 0, ?4)
+         ON CONFLICT(id) DO UPDATE SET
+           title = excluded.title, updated = excluded.updated,
+           deleted = 0, fetched_at = excluded.fetched_at",
+        params![id, title, updated, time::to_iso(&time::now_utc())],
+    )?;
+    Ok(())
+}
+
+/// tasks.insert の結果 (Google 発番 ID) をローカルキャッシュへ反映する (仕様 §13.9)。
+pub struct NewTaskRow<'a> {
+    pub id: &'a str,
+    pub task_list_id: &'a str,
+    pub title: &'a str,
+    pub notes: Option<&'a str>,
+    pub due: Option<&'a str>,
+    pub status: &'a str,
+    pub position: Option<&'a str>,
+    pub updated: Option<&'a str>,
+}
+
+pub fn insert_task_row(conn: &Connection, task: &NewTaskRow) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO tasks
+           (id, task_list_id, title, notes, due, status, position, updated, deleted, dirty, fetched_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, ?9)
+         ON CONFLICT(id) DO UPDATE SET
+           task_list_id = excluded.task_list_id,
+           title = excluded.title, notes = excluded.notes,
+           due = excluded.due, status = excluded.status,
+           position = excluded.position, updated = excluded.updated,
+           deleted = 0, fetched_at = excluded.fetched_at",
+        params![
+            task.id,
+            task.task_list_id,
+            task.title,
+            task.notes,
+            task.due,
+            task.status,
+            task.position,
+            task.updated,
+            time::to_iso(&time::now_utc()),
+        ],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

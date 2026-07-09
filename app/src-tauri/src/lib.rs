@@ -178,6 +178,7 @@ pub fn run() {
             commands::session::dismiss_interrupted,
             commands::dashboard::get_today_dashboard,
             commands::dashboard::get_candidates,
+            commands::dashboard::get_task_lists,
             commands::analytics::get_archive_analytics,
             commands::import_export::export_csv,
             commands::import_export::import_gas_csv,
@@ -196,6 +197,13 @@ pub fn run() {
             ai::get_daily_plan,
             ai::generate_daily_review,
             ai::get_daily_review,
+            ai::capture::add_capture,
+            ai::capture::get_captures,
+            ai::capture::get_inbox_count,
+            ai::capture::classify_capture,
+            ai::capture::register_capture_item,
+            ai::capture::dismiss_capture,
+            ai::capture::quick_add_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

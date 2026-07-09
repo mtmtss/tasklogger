@@ -95,6 +95,24 @@ pub fn get_today_dashboard(state: State<'_, AppState>) -> CmdResult<TodayDashboa
     })
 }
 
+/// タスクリスト一覧 (Inbox の登録先選択・クイック追加用, AI 拡張仕様 §13.5)。
+#[tauri::command]
+pub fn get_task_lists(state: State<'_, AppState>) -> CmdResult<Vec<TaskListOption>> {
+    let conn = state.db.lock().unwrap();
+    let rows = repos::fetch_task_lists(&conn).map_err(db_err)?;
+    Ok(rows
+        .into_iter()
+        .map(|l| TaskListOption { id: l.id, title: l.title })
+        .collect())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListOption {
+    pub id: String,
+    pub title: String,
+}
+
 /// 候補タスク (spec §5.3): due が今日でない or due なしの未完了タスク。
 #[tauri::command]
 pub fn get_candidates(state: State<'_, AppState>) -> CmdResult<Vec<TaskGroup>> {
