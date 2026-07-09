@@ -27,6 +27,52 @@ pub fn toggle_float_window(app: tauri::AppHandle) -> CmdResult<bool> {
     Ok(!visible)
 }
 
+/// キャプチャ窓を表示してフォーカスする (ホットキー / トレイ / UI 共用, AI 拡張仕様 §13.3)。
+pub fn show_capture_window(app: &tauri::AppHandle) {
+    if let Some(window) = tauri::Manager::get_webview_window(app, "capture") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+pub fn open_capture_window(app: tauri::AppHandle) -> CmdResult<()> {
+    show_capture_window(&app);
+    Ok(())
+}
+
+/// キャプチャ用ホットキーを検証つきで変更する。登録に失敗したら元のキーへ戻す。
+#[tauri::command]
+pub fn set_capture_hotkey(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    hotkey: String,
+) -> CmdResult<()> {
+    let hotkey = hotkey.trim().to_lowercase();
+    if hotkey.is_empty() {
+        return Err("ホットキーを入力してください (例: ctrl+alt+space)。".into());
+    }
+    let previous = {
+        let conn = state.db.lock().unwrap();
+        repos::get_setting(&conn, "capture_hotkey")
+            .map_err(db_err)?
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| crate::DEFAULT_CAPTURE_HOTKEY.to_string())
+    };
+    match crate::register_capture_hotkey(&app, &hotkey) {
+        Ok(()) => {
+            let conn = state.db.lock().unwrap();
+            repos::set_setting(&conn, "capture_hotkey", &hotkey).map_err(db_err)?;
+            let _ = repos::delete_setting(&conn, "capture_hotkey_error");
+            Ok(())
+        }
+        Err(err) => {
+            let _ = crate::register_capture_hotkey(&app, &previous);
+            Err(err)
+        }
+    }
+}
+
 pub fn db_err(e: rusqlite::Error) -> String {
     format!("データベースエラー: {e}")
 }

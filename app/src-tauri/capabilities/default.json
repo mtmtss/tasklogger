@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main and float windows",
-  "windows": ["main", "float"],
+  "description": "Capability for the main, float and capture windows",
+  "windows": ["main", "float", "capture"],
   "permissions": [
     "core:default",
     "opener:default",

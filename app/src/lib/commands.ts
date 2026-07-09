@@ -144,6 +144,80 @@ export const generateDailyReview = () =>
 export const getDailyReview = () =>
   invoke<StoredReview | null>("get_daily_review");
 
+// ---- クイックキャプチャ + Inbox (AI 拡張仕様 §13) ----
+
+export type CaptureKind =
+  | "TASK"
+  | "RESEARCH_IDEA"
+  | "LIFE_ADMIN"
+  | "SOMEDAY"
+  | "UNCLEAR";
+
+export interface CaptureItem {
+  kind: CaptureKind;
+  title: string;
+  listName?: string | null;
+  due?: string | null;
+  firstStep?: string | null;
+  note?: string | null;
+  registeredTaskId?: string | null;
+}
+
+export interface Capture {
+  id: string;
+  text: string;
+  status: "pending" | "classified" | "registered" | "dismissed";
+  aiResult: { items: CaptureItem[] } | null;
+  createdAt: string;
+}
+
+export interface TaskListOption {
+  id: string;
+  title: string;
+}
+
+export interface RegisterItemInput {
+  title: string;
+  listId?: string | null;
+  listName?: string | null;
+  due?: string | null;
+  firstStep?: string | null;
+  note?: string | null;
+  itemIndex?: number | null;
+}
+
+export const addCapture = (text: string) =>
+  invoke<string>("add_capture", { text });
+
+export const getCaptures = () => invoke<Capture[]>("get_captures");
+
+export const getInboxCount = () => invoke<number>("get_inbox_count");
+
+export const classifyCapture = (captureId: string) =>
+  invoke<void>("classify_capture", { captureId });
+
+export const registerCaptureItem = (
+  captureId: string,
+  item: RegisterItemInput,
+) => invoke<Capture>("register_capture_item", { captureId, item });
+
+export const dismissCapture = (captureId: string) =>
+  invoke<void>("dismiss_capture", { captureId });
+
+export const quickAddTask = (
+  listId: string,
+  title: string,
+  due?: string | null,
+) => invoke<void>("quick_add_task", { listId, title, due: due ?? null });
+
+export const getTaskLists = () =>
+  invoke<TaskListOption[]>("get_task_lists");
+
+export const openCaptureWindow = () => invoke<void>("open_capture_window");
+
+export const setCaptureHotkey = (hotkey: string) =>
+  invoke<void>("set_capture_hotkey", { hotkey });
+
 export interface DateSummary {
   date: string;
   totalSeconds: number;

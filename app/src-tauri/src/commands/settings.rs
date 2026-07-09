@@ -21,6 +21,8 @@ const ALLOWED_KEYS: &[&str] = &[
     "ai_model",
     "ai_user_context",
     "ai_auto_plan",
+    "capture_hotkey",
+    "capture_hotkey_error",
 ];
 
 #[tauri::command]

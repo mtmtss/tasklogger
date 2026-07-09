@@ -31,6 +31,20 @@
         "transparent": true,
         "shadow": false,
         "visible": false
+      },
+      {
+        "label": "capture",
+        "title": "TaskLogger Capture",
+        "width": 520,
+        "height": 180,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "transparent": true,
+        "shadow": false,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {

@@ -115,6 +115,46 @@ fn save_float_position(app: &tauri::AppHandle, x: i32, y: i32) {
     let _ = repos::set_setting(&conn, "float_window_position", &format!("{x},{y}"));
 }
 
+pub(crate) const DEFAULT_CAPTURE_HOTKEY: &str = "ctrl+alt+space";
+
+/// キャプチャ用グローバルホットキーを登録し直す (AI 拡張仕様 §13.3)。
+pub(crate) fn register_capture_hotkey(app: &tauri::AppHandle, hotkey: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let shortcuts = app.global_shortcut();
+    shortcuts.unregister_all().map_err(|e| e.to_string())?;
+    shortcuts
+        .on_shortcut(hotkey, |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                commands::show_capture_window(app);
+            }
+        })
+        .map_err(|e| format!("ホットキー「{hotkey}」を登録できませんでした: {e}"))
+}
+
+/// 起動時のホットキー登録。失敗 (他アプリと衝突等) は設定に記録して設定画面で警告する。
+fn setup_capture_hotkey(app: &tauri::AppHandle) {
+    let hotkey = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().unwrap();
+        repos::get_setting(&conn, "capture_hotkey")
+            .ok()
+            .flatten()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_CAPTURE_HOTKEY.to_string())
+    };
+    let result = register_capture_hotkey(app, &hotkey);
+    let state = app.state::<AppState>();
+    let conn = state.db.lock().unwrap();
+    match result {
+        Ok(()) => {
+            let _ = repos::delete_setting(&conn, "capture_hotkey_error");
+        }
+        Err(err) => {
+            let _ = repos::set_setting(&conn, "capture_hotkey_error", &err);
+        }
+    }
+}
+
 fn close_to_tray_enabled(app: &tauri::AppHandle) -> bool {
     let state = app.state::<AppState>();
     let conn = state.db.lock().unwrap();
@@ -139,6 +179,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -151,6 +192,7 @@ pub fn run() {
             google::init(app.handle());
             tray::setup(app.handle())?;
             restore_float_position(app.handle());
+            setup_capture_hotkey(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -168,6 +210,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::toggle_float_window,
+            commands::open_capture_window,
+            commands::set_capture_hotkey,
             commands::session::start_task,
             commands::session::stop_task,
             commands::session::complete_task_direct,

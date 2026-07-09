@@ -9,10 +9,11 @@ use crate::state::AppState;
 
 pub fn setup(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show_main = MenuItem::with_id(app, "show_main", "メインウィンドウを開く", true, None::<&str>)?;
+    let capture = MenuItem::with_id(app, "capture", "思いつきをメモ", true, None::<&str>)?;
     let toggle_float = MenuItem::with_id(app, "toggle_float", "フロートウィンドウ切替", true, None::<&str>)?;
     let sync_now = MenuItem::with_id(app, "sync_now", "今すぐ同期", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_main, &toggle_float, &sync_now, &quit])?;
+    let menu = Menu::with_items(app, &[&show_main, &capture, &toggle_float, &sync_now, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().expect("icon").clone())
@@ -21,6 +22,7 @@ pub fn setup(app: &tauri::AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show_main" => show_main_window(app),
+            "capture" => crate::commands::show_capture_window(app),
             "toggle_float" => {
                 let _ = crate::commands::toggle_float_window(app.clone());
             }
