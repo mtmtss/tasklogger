@@ -11,6 +11,7 @@ import {
   seedSampleData,
   setAiApiKey,
   setAutostart,
+  setCaptureHotkey,
   setSetting,
 } from "../lib/commands";
 import { useSyncStatus } from "../lib/queries";
@@ -27,6 +28,9 @@ export default function SettingsPage() {
   const [idleMinutes, setIdleMinutes] = useState("5");
   const [autostart, setAutostartState] = useState(false);
   const [behaviorError, setBehaviorError] = useState<string | null>(null);
+  const [hotkey, setHotkey] = useState("ctrl+alt+space");
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [hotkeyMessage, setHotkeyMessage] = useState<string | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -36,9 +40,21 @@ export default function SettingsPage() {
         setCloseToTray(settings["close_to_tray"] !== "false");
         setIdleMinutes(settings["idle_pause_minutes"] ?? "5");
         setAutostartState(settings["autostart"] === "true");
+        setHotkey(settings["capture_hotkey"] ?? "ctrl+alt+space");
+        setHotkeyError(settings["capture_hotkey_error"] ?? null);
       })
       .catch(() => {});
   }, []);
+
+  const applyHotkey = () => {
+    setHotkeyMessage(null);
+    setCaptureHotkey(hotkey)
+      .then(() => {
+        setHotkeyError(null);
+        setHotkeyMessage("ホットキーを変更しました。");
+      })
+      .catch((e) => setHotkeyError(String(e)));
+  };
 
   const handleAutostart = (checked: boolean) => {
     setBehaviorError(null);
@@ -187,6 +203,34 @@ export default function SettingsPage() {
           />
           Windows サインイン時に自動起動する
         </label>
+        <div className="mt-3 border-t border-slate-800 pt-3">
+          <label className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+            クイックキャプチャのホットキー
+            <input
+              value={hotkey}
+              onChange={(e) => setHotkey(e.target.value)}
+              placeholder="ctrl+alt+space"
+              className="w-44 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm focus:border-sky-600 focus:outline-none"
+            />
+            <button
+              onClick={applyHotkey}
+              disabled={!hotkey.trim()}
+              className="rounded-md border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+            >
+              適用
+            </button>
+          </label>
+          <p className="mt-1 text-xs text-slate-500">
+            どのアプリで作業中でもキャプチャ入力を開きます (例: ctrl+alt+space,
+            ctrl+shift+j)。
+          </p>
+          {hotkeyMessage && (
+            <p className="mt-1 text-xs text-emerald-400">{hotkeyMessage}</p>
+          )}
+          {hotkeyError && (
+            <p className="mt-1 text-xs text-amber-300">{hotkeyError}</p>
+          )}
+        </div>
         {behaviorError && (
           <p className="mt-2 text-sm text-rose-300">{behaviorError}</p>
         )}

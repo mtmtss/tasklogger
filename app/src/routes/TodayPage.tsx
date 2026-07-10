@@ -12,6 +12,7 @@ import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
 import DailyPlanCard from "../components/DailyPlanCard";
 import DailyReviewCard from "../components/DailyReviewCard";
+import QuickAddTask from "../components/QuickAddTask";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
@@ -178,6 +179,9 @@ export default function TodayPage() {
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-slate-400">候補タスク</h2>
+        <div className="mb-2">
+          <QuickAddTask onError={setError} />
+        </div>
         {candidates.data?.length === 0 && (
           <p className="text-sm text-slate-500">候補はありません。</p>
         )}
