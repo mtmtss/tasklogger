@@ -78,6 +78,10 @@ const MIGRATIONS: &[&str] = &[
       value TEXT NOT NULL
     );
     "#,
+    // v2: 「今日やる」ローカル専用フラグ (Google Tasks へは同期しない)
+    r#"
+    ALTER TABLE tasks ADD COLUMN today_flag INTEGER NOT NULL DEFAULT 0;
+    "#,
 ];
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {

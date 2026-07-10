@@ -6,6 +6,7 @@ import {
   startTask,
   stopTask,
   toggleFloatWindow,
+  updateTaskDue,
 } from "../lib/commands";
 import { useCandidates, useDashboard } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
@@ -41,6 +42,8 @@ export default function TodayPage() {
       : run(() =>
           completeTaskDirect({ taskListId: task.taskListId, taskId: task.taskId }),
         );
+  const handleUpdateDue = (task: TaskItem, due: string | null) =>
+    run(() => updateTaskDue({ taskListId: task.taskListId, taskId: task.taskId }, due));
 
   const data = dashboard.data;
 
@@ -123,6 +126,7 @@ export default function TodayPage() {
                 onStart={handleStart}
                 onPause={handlePause}
                 onComplete={handleComplete}
+                onUpdateDue={handleUpdateDue}
               />
             ))}
           </div>

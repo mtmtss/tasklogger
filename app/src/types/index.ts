@@ -11,6 +11,7 @@ export interface TaskItem {
   appStatus: AppStatus;
   todayDurationSeconds: number;
   todayDurationMinutes: number;
+  isOverdue: boolean;
 }
 
 export interface TaskGroup {
