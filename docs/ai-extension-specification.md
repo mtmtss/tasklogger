@@ -42,7 +42,7 @@
 | MVP スコープ | **今日の作戦生成のみ**。Inbox+AI 整理 / 日次レビュー / 研究アイデア DB は将来拡張(§10) |
 | タスク基盤 | **Google Tasks に統一**(TickTick 連携はしない。TickTick からは移行) |
 | 音声入力 | **Windows 標準音声入力(Win+H)を活用**。アプリ内のテキスト欄に OS 機能で喋って入力する。専用音声パイプラインは将来拡張 |
-| LLM | **Gemini API**(Google)。既定モデル `gemini-2.5-flash`(無料枠運用可) |
+| LLM | **Gemini API**(Google)。既定モデル `gemini-3.5-flash`(無料枠運用可) |
 
 ---
 
@@ -178,7 +178,7 @@ LLM は **Gemini API**(Google Generative Language API)を用いる。
 
 | 項目 | 値 |
 | --- | --- |
-| 既定モデル | `gemini-2.5-flash`(設定 `ai_model` で変更可。選択肢: 2.5-flash / 2.5-flash-lite / 2.5-pro) |
+| 既定モデル | `gemini-3.5-flash`(設定 `ai_model` で変更可。選択肢: 3.5-flash / 3.1-flash-lite / 3.1-pro-preview / 2.5-flash / 2.5-flash-lite / 2.5-pro。2.5系はプロジェクトによっては新規ユーザー提供終了で使えない場合がある) |
 | エンドポイント | `POST /v1beta/models/{model}:generateContent`(キーは `x-goog-api-key` ヘッダ) |
 | 出力形式 | `generationConfig.responseMimeType: "application/json"` + `responseSchema`(§3.3 のスキーマ。Gemini の OpenAPI 風形式) |
 | maxOutputTokens | 8192(thinking 分の余裕込み) |
@@ -197,7 +197,7 @@ contents (user):
   [可変] タスク状況 + 実績データ + 当日の状態 + 現在日時
 ```
 
-- Gemini 2.5 系は implicit caching が自動適用されるため、明示のキャッシュ制御は行わない
+- Gemini 2.5 以降(3.5 系含む)は generateContent API でも implicit caching が自動適用される(既定有効、最小トークン数はモデル依存)ため、明示のキャッシュ制御は行わない
 - 可変データは必ず user 側に置き、systemInstruction は日をまたいでも安定に保つ
 
 ## 4.3 API キー管理
@@ -213,9 +213,9 @@ contents (user):
 
 | モデル | 無料枠 | 有料時の目安 (1回 / 毎日2回×30日) |
 | --- | --- | --- |
-| gemini-2.5-flash (既定) | **あり**(1日あたりのリクエスト上限内なら $0) | 約 $0.005 / 約 $0.3/月 |
-| gemini-2.5-flash-lite | あり | 約 $0.002 / 約 $0.1/月 |
-| gemini-2.5-pro | 限定的 | 約 $0.02 / 約 $1/月 |
+| gemini-3.5-flash (既定) | **あり**(1日あたりのリクエスト上限内なら $0) | 約 $0.005 / 約 $0.3/月 |
+| gemini-3.1-flash-lite | あり | 約 $0.002 / 約 $0.1/月 |
+| gemini-3.1-pro-preview | **なし**(無料枠のリクエスト上限が0。課金設定が必要) | 約 $0.02 / 約 $1/月 |
 
 1 日数回の作戦生成なら **flash の無料枠に収まる想定**(上限超過時は 429 → 時間を置いて再試行)。
 
@@ -254,7 +254,7 @@ CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date);
 
 | キー | 内容 |
 | --- | --- |
-| `ai_model` | 既定 `gemini-2.5-flash` |
+| `ai_model` | 既定 `gemini-3.5-flash` |
 | `ai_user_context` | 固定プロファイル自由記述 |
 | `ai_auto_plan` | "true" でその日初回起動時に自動生成(既定 false) |
 

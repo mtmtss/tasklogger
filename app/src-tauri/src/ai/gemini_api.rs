@@ -6,8 +6,14 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 const API_BASE: &str = "https://generativelanguage.googleapis.com/v1beta";
-pub const DEFAULT_MODEL: &str = "gemini-2.5-flash";
-pub const ALLOWED_MODELS: [&str; 3] = [
+pub const DEFAULT_MODEL: &str = "gemini-3.5-flash";
+/// gemini-2.5-* はプロジェクトによっては新規ユーザー向け提供終了で 404 になる
+/// (2025-06-17 付で deprecated、2026-10-16 EOL 予定)。既存プロジェクトでは
+/// 使える場合もあるため選択肢には残す。
+pub const ALLOWED_MODELS: [&str; 6] = [
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",

@@ -224,7 +224,7 @@ function AiSection() {
   const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [model, setModel] = useState("gemini-3.5-flash");
   const [userContext, setUserContext] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -329,9 +329,12 @@ function AiSection() {
             onChange={(e) => handleModel(e.target.value)}
             className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
           >
-            <option value="gemini-2.5-flash">gemini-2.5-flash (推奨・無料枠あり)</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro (品質優先)</option>
-            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (最速・最安)</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash (推奨・無料枠あり)</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (最速・最安)</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (品質優先・課金必須)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (旧世代・新規プロジェクトでは使えない場合あり)</option>
+            <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (旧世代・新規プロジェクトでは使えない場合あり)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (旧世代・新規プロジェクトでは使えない場合あり)</option>
           </select>
         </label>
         <div>
