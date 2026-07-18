@@ -24,7 +24,7 @@ export default function DailyPlanCard({
   const [plan, setPlan] = useState<StoredPlan | null>(null);
   const [note, setNote] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -36,10 +36,7 @@ export default function DailyPlanCard({
   const handleGenerate = () => {
     setGenerating(true);
     generateDailyPlan(note)
-      .then((stored) => {
-        setPlan(stored);
-        setCollapsed(false);
-      })
+      .then(setPlan)
       .catch((e) => onError(String(e)))
       .finally(() => setGenerating(false));
   };
@@ -53,33 +50,50 @@ export default function DailyPlanCard({
   };
 
   return (
-    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-violet-300">
-          今日の作戦
-          {plan && (
-            <span className="ml-2 text-xs font-normal text-slate-500">
-              {new Date(plan.generatedAt).toLocaleTimeString("ja-JP", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              生成
-            </span>
-          )}
-        </h2>
-        {plan && (
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-xs text-slate-500 hover:text-slate-300"
-          >
-            {collapsed ? "開く" : "たたむ"}
-          </button>
-        )}
-      </div>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 rounded-md border border-violet-500/40 bg-violet-500/5 px-3 py-1.5 text-sm text-violet-300 hover:bg-violet-500/10"
+      >
+        今日の作戦
+        {plan && <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />}
+      </button>
 
-      {!collapsed && (
-        <>
-          <div className="mt-3 flex items-center gap-2">
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50"
+        />
+      )}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md transform flex-col border-l border-violet-500/40 bg-slate-950 shadow-xl transition-transform duration-300 ease-in-out ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 p-4">
+          <h2 className="text-sm font-semibold text-violet-300">
+            今日の作戦
+            {plan && (
+              <span className="ml-2 text-xs font-normal text-slate-500">
+                {new Date(plan.generatedAt).toLocaleTimeString("ja-JP", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}{" "}
+                生成
+              </span>
+            )}
+          </h2>
+          <button
+            onClick={() => setOpen(false)}
+            className="text-slate-500 hover:text-slate-300"
+            aria-label="閉じる"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex items-center gap-2">
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -139,9 +153,9 @@ export default function DailyPlanCard({
               </p>
             </div>
           )}
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 

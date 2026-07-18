@@ -60,6 +60,7 @@ export default function TodayPage() {
         </h1>
         <div className="flex items-center gap-3">
           <SyncBadge onError={setError} />
+          <DailyPlanCard onError={setError} />
           <button
             onClick={() => void toggleFloatWindow()}
             className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
@@ -80,8 +81,6 @@ export default function TodayPage() {
           </button>
         </div>
       )}
-
-      <DailyPlanCard onError={setError} />
 
       {data && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
