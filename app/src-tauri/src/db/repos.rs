@@ -12,12 +12,14 @@ pub struct TaskRow {
     pub notes: String,
     pub due: Option<String>,
     pub status: String,
+    /// 「今日やる」ローカル専用フラグ (Google Tasks へは同期しない、spec拡張)。
+    pub today_flag: bool,
 }
 
 /// 未完了 (needsAction) のタスクをタスクリスト名込みで全件取得。
 pub fn fetch_open_tasks(conn: &Connection) -> rusqlite::Result<Vec<TaskRow>> {
     let mut stmt = conn.prepare(
-        "SELECT t.id, t.task_list_id, l.title, t.title, COALESCE(t.notes, ''), t.due, t.status
+        "SELECT t.id, t.task_list_id, l.title, t.title, COALESCE(t.notes, ''), t.due, t.status, t.today_flag
          FROM tasks t
          JOIN task_lists l ON l.id = t.task_list_id
          WHERE t.deleted = 0 AND l.deleted = 0 AND t.status != 'completed'
@@ -33,6 +35,7 @@ pub fn fetch_open_tasks(conn: &Connection) -> rusqlite::Result<Vec<TaskRow>> {
                 notes: row.get(4)?,
                 due: row.get(5)?,
                 status: row.get(6)?,
+                today_flag: row.get(7)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -41,7 +44,7 @@ pub fn fetch_open_tasks(conn: &Connection) -> rusqlite::Result<Vec<TaskRow>> {
 
 pub fn get_task(conn: &Connection, task_list_id: &str, task_id: &str) -> rusqlite::Result<Option<TaskRow>> {
     conn.query_row(
-        "SELECT t.id, t.task_list_id, l.title, t.title, COALESCE(t.notes, ''), t.due, t.status
+        "SELECT t.id, t.task_list_id, l.title, t.title, COALESCE(t.notes, ''), t.due, t.status, t.today_flag
          FROM tasks t JOIN task_lists l ON l.id = t.task_list_id
          WHERE t.task_list_id = ?1 AND t.id = ?2",
         params![task_list_id, task_id],
@@ -54,6 +57,7 @@ pub fn get_task(conn: &Connection, task_list_id: &str, task_id: &str) -> rusqlit
                 notes: row.get(4)?,
                 due: row.get(5)?,
                 status: row.get(6)?,
+                today_flag: row.get(7)?,
             })
         },
     )
@@ -273,22 +277,39 @@ pub fn mark_task_completed_locally(
     task_id: &str,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        "UPDATE tasks SET status = 'completed', dirty = 1
+        "UPDATE tasks SET status = 'completed', dirty = 1, today_flag = 0
          WHERE task_list_id = ?1 AND id = ?2",
         params![task_list_id, task_id],
     )?;
     Ok(())
 }
 
-pub fn set_task_due_today_locally(
+/// due の更新 (Google Tasks へ同期される)。`None` で期限をクリアする。
+pub fn set_task_due_locally(
     conn: &Connection,
     task_list_id: &str,
     task_id: &str,
+    due: Option<&str>,
 ) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE tasks SET due = ?3, dirty = 1
          WHERE task_list_id = ?1 AND id = ?2",
-        params![task_list_id, task_id, time::today_due_value()],
+        params![task_list_id, task_id, due],
+    )?;
+    Ok(())
+}
+
+/// 「今日やる」ローカル専用フラグの更新。Google Tasks へは同期しない (dirty/sync_queue 対象外)。
+pub fn set_today_flag(
+    conn: &Connection,
+    task_list_id: &str,
+    task_id: &str,
+    flag: bool,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE tasks SET today_flag = ?3
+         WHERE task_list_id = ?1 AND id = ?2",
+        params![task_list_id, task_id, flag],
     )?;
     Ok(())
 }
@@ -423,6 +444,50 @@ mod tests {
             .find(|t| t.id == "sample-task-2")
             .map(|t| time::is_due_today(&t.due));
         assert_eq!(due_today, Some(true));
+    }
+
+    /// today_flag: 既定値0、set_today_flagで立つ、完了で自動的に0へ戻る。
+    #[test]
+    fn today_flag_lifecycle() {
+        let conn = crate::db::open_in_memory().unwrap();
+        seed_sample_data(&conn).unwrap();
+
+        let task = get_task(&conn, "sample-list-1", "sample-task-1")
+            .unwrap()
+            .unwrap();
+        assert!(!task.today_flag);
+
+        set_today_flag(&conn, "sample-list-1", "sample-task-1", true).unwrap();
+        let task = get_task(&conn, "sample-list-1", "sample-task-1")
+            .unwrap()
+            .unwrap();
+        assert!(task.today_flag);
+
+        mark_task_completed_locally(&conn, "sample-list-1", "sample-task-1").unwrap();
+        let task = get_task(&conn, "sample-list-1", "sample-task-1")
+            .unwrap()
+            .unwrap();
+        assert!(!task.today_flag);
+    }
+
+    /// set_task_due_locally: Some/Noneどちらでも正しく更新できる。
+    #[test]
+    fn set_task_due_locally_updates_or_clears() {
+        let conn = crate::db::open_in_memory().unwrap();
+        seed_sample_data(&conn).unwrap();
+
+        set_task_due_locally(&conn, "sample-list-1", "sample-task-1", Some("2030-01-01T00:00:00.000Z"))
+            .unwrap();
+        let task = get_task(&conn, "sample-list-1", "sample-task-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(task.due.as_deref(), Some("2030-01-01T00:00:00.000Z"));
+
+        set_task_due_locally(&conn, "sample-list-1", "sample-task-1", None).unwrap();
+        let task = get_task(&conn, "sample-list-1", "sample-task-1")
+            .unwrap()
+            .unwrap();
+        assert_eq!(task.due, None);
     }
 }
 
