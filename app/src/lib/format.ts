@@ -32,3 +32,13 @@ export function formatJapaneseDate(dateText: string): string {
   ];
   return `${m}月${d}日(${youbi})`;
 }
+
+/** "2026-07-05" → "7/5(土)" (狭いラベル向け) */
+export function formatShortDate(dateText: string): string {
+  const [y, m, d] = dateText.split("-").map(Number);
+  if (!y || !m || !d) return dateText;
+  const youbi = ["日", "月", "火", "水", "木", "金", "土"][
+    new Date(y, m - 1, d).getDay()
+  ];
+  return `${m}/${d}(${youbi})`;
+}

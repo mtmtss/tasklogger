@@ -178,6 +178,7 @@ pub fn run() {
             commands::dashboard::get_today_dashboard,
             commands::dashboard::get_candidates,
             commands::analytics::get_archive_analytics,
+            commands::analytics::get_range_logs,
             commands::import_export::export_csv,
             commands::import_export::import_gas_csv,
             commands::settings::get_settings,

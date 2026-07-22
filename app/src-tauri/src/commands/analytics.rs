@@ -47,6 +47,58 @@ pub struct TaskSummary {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkLogEntry {
+    pub log_id: String,
+    pub task_list_id: String,
+    pub task_list_name: String,
+    pub task_id: String,
+    pub task_title: String,
+    pub action_type: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub duration_seconds: i64,
+    pub duration_minutes: i64,
+    pub log_date: String,
+    pub memo: String,
+    pub end_reason: String,
+}
+
+/// タイムライン表示用: 期間内の作業ログを開始時刻順に取得 (spec §5.5 拡張)。
+#[tauri::command]
+pub fn get_range_logs(
+    state: State<'_, AppState>,
+    start_date: String,
+    end_date: String,
+) -> CmdResult<Vec<WorkLogEntry>> {
+    let (start, end) = normalize_range(&start_date, &end_date)?;
+
+    let logs = {
+        let conn = state.db.lock().unwrap();
+        repos::fetch_logs_by_range(&conn, &start, &end).map_err(db_err)?
+    };
+
+    Ok(logs
+        .into_iter()
+        .map(|log| WorkLogEntry {
+            log_id: log.log_id,
+            task_list_id: log.task_list_id,
+            task_list_name: log.task_list_name,
+            task_id: log.task_id,
+            task_title: log.task_title,
+            action_type: log.action_type,
+            start_time: log.start_time,
+            end_time: log.end_time,
+            duration_seconds: log.duration_seconds,
+            duration_minutes: log.duration_minutes,
+            log_date: log.log_date,
+            memo: log.memo,
+            end_reason: log.end_reason,
+        })
+        .collect())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArchiveAnalytics {
     pub start_date: String,
     pub end_date: String,

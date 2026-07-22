@@ -99,6 +99,25 @@ export interface ArchiveAnalytics {
 export const getArchiveAnalytics = (startDate: string, endDate: string) =>
   invoke<ArchiveAnalytics>("get_archive_analytics", { startDate, endDate });
 
+export interface WorkLogEntry {
+  logId: string;
+  taskListId: string;
+  taskListName: string;
+  taskId: string;
+  taskTitle: string;
+  actionType: string;
+  startTime: string;
+  endTime: string;
+  durationSeconds: number;
+  durationMinutes: number;
+  logDate: string;
+  memo: string;
+  endReason: string;
+}
+
+export const getRangeLogs = (startDate: string, endDate: string) =>
+  invoke<WorkLogEntry[]>("get_range_logs", { startDate, endDate });
+
 export interface ImportResult {
   imported: number;
   skipped: number;
