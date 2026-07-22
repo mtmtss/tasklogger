@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  doItNow,
   generateDailyPlan,
   getAiStatus,
   getDailyPlan,
@@ -195,21 +194,6 @@ function PlanSection({
               </div>
               {item.taskListId && item.taskId && (
                 <div className="flex shrink-0 gap-1.5">
-                  <button
-                    onClick={() =>
-                      // due=today 化 + 開始。既に today のタスクにも冪等 (due 再設定のみ)。
-                      // 実行中タスクがある場合は既存のブロックエラーがそのまま表示される
-                      onAct(() =>
-                        doItNow({
-                          taskListId: item.taskListId!,
-                          taskId: item.taskId!,
-                        }),
-                      )
-                    }
-                    className="rounded-md bg-pink-600 px-2.5 py-1 text-xs text-white hover:bg-pink-500"
-                  >
-                    今すぐやる
-                  </button>
                   <button
                     onClick={() =>
                       onAct(() =>
