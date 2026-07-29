@@ -3,6 +3,7 @@ import type { TaskItem } from "../types";
 import { formatMinutes } from "../lib/format";
 import StatusChip from "./StatusChip";
 import DueDatePrompt from "./DueDatePrompt";
+import TaskMenu from "./TaskMenu";
 
 interface Props {
   task: TaskItem;
@@ -10,6 +11,7 @@ interface Props {
   onPause: () => void;
   onComplete: (task: TaskItem) => void;
   onUpdateDue: (task: TaskItem, due: string | null) => void;
+  onDelete: (task: TaskItem) => void;
 }
 
 /** 今日リストの 1 タスク。状態に応じたボタンを出す (spec §5.1)。 */
@@ -19,6 +21,7 @@ export default function TaskCard({
   onPause,
   onComplete,
   onUpdateDue,
+  onDelete,
 }: Props) {
   const isRunning = task.appStatus === "running";
   const isCompleted = task.appStatus === "completed";
@@ -58,39 +61,50 @@ export default function TaskCard({
             </p>
           )}
         </div>
-        {!isCompleted && (
-          <div className="flex shrink-0 gap-2">
-            {task.appStatus === "not_started" && (
-              <>
-                <ActionButton primary onClick={() => onStart(task)}>
-                  開始
+        <div className="flex shrink-0 gap-2">
+          {!isCompleted && (
+            <>
+              {task.appStatus === "not_started" && (
+                <>
+                  <ActionButton primary onClick={() => onStart(task)}>
+                    開始
+                  </ActionButton>
+                  <ActionButton onClick={() => onComplete(task)}>完了</ActionButton>
+                </>
+              )}
+              {task.appStatus === "running" && (
+                <>
+                  <ActionButton onClick={onPause}>中断</ActionButton>
+                  <ActionButton primary onClick={() => onComplete(task)}>
+                    完了
+                  </ActionButton>
+                </>
+              )}
+              {task.appStatus === "paused" && (
+                <>
+                  <ActionButton primary onClick={() => onStart(task)}>
+                    再開
+                  </ActionButton>
+                  <ActionButton onClick={() => onComplete(task)}>完了</ActionButton>
+                </>
+              )}
+              {task.isOverdue && (
+                <ActionButton onClick={() => setShowDuePrompt(true)}>
+                  期限を変更
                 </ActionButton>
-                <ActionButton onClick={() => onComplete(task)}>完了</ActionButton>
-              </>
-            )}
-            {task.appStatus === "running" && (
-              <>
-                <ActionButton onClick={onPause}>中断</ActionButton>
-                <ActionButton primary onClick={() => onComplete(task)}>
-                  完了
-                </ActionButton>
-              </>
-            )}
-            {task.appStatus === "paused" && (
-              <>
-                <ActionButton primary onClick={() => onStart(task)}>
-                  再開
-                </ActionButton>
-                <ActionButton onClick={() => onComplete(task)}>完了</ActionButton>
-              </>
-            )}
-            {task.isOverdue && (
-              <ActionButton onClick={() => setShowDuePrompt(true)}>
-                期限を変更
-              </ActionButton>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+          {!isRunning && (
+            <TaskMenu
+              onDelete={() => {
+                if (window.confirm(`「${task.title}」を削除しますか？`)) {
+                  onDelete(task);
+                }
+              }}
+            />
+          )}
+        </div>
       </div>
       {showDuePrompt && (
         <DueDatePrompt

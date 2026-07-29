@@ -86,6 +86,14 @@ pub struct TaskRef {
     pub task_id: String,
 }
 
+/// タスクをその場で追加する際の、追加先タスクリストの選択肢。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListOption {
+    pub task_list_id: String,
+    pub task_list_name: String,
+}
+
 /// DB から読んだ work_logs の 1 行 (状態導出・集計に使う最小限)。
 #[derive(Debug, Clone)]
 pub struct WorkLogRow {

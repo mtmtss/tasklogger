@@ -2,22 +2,27 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   completeTaskDirect,
+  createTask,
+  deleteTask,
   doItNow,
   startTask,
   stopTask,
   toggleFloatWindow,
   updateTaskDue,
 } from "../lib/commands";
-import { useCandidates, useDashboard } from "../lib/queries";
+import { useCandidates, useDashboard, useTaskLists } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
+import QuickAddTask from "../components/QuickAddTask";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
+import TaskMenu from "../components/TaskMenu";
 
 export default function TodayPage() {
   const dashboard = useDashboard();
   const candidates = useCandidates();
+  const taskLists = useTaskLists();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +49,17 @@ export default function TodayPage() {
         );
   const handleUpdateDue = (task: TaskItem, due: string | null) =>
     run(() => updateTaskDue({ taskListId: task.taskListId, taskId: task.taskId }, due));
+  const handleDelete = (task: TaskItem) =>
+    run(() => deleteTask({ taskListId: task.taskListId, taskId: task.taskId }));
+  const handleAddTask = (taskListId: string, title: string) => {
+    setError(null);
+    return createTask(taskListId, title)
+      .then(refresh)
+      .catch((e) => {
+        setError(String(e));
+        throw e;
+      });
+  };
 
   const data = dashboard.data;
 
@@ -77,6 +93,10 @@ export default function TodayPage() {
             閉じる
           </button>
         </div>
+      )}
+
+      {taskLists.data && taskLists.data.length > 0 && (
+        <QuickAddTask taskLists={taskLists.data} onAdd={handleAddTask} />
       )}
 
       {data && (
@@ -127,6 +147,7 @@ export default function TodayPage() {
                 onPause={handlePause}
                 onComplete={handleComplete}
                 onUpdateDue={handleUpdateDue}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -186,16 +207,25 @@ export default function TodayPage() {
                   </span>
                   <span className="truncate text-sm">{task.title}</span>
                 </div>
-                <button
-                  onClick={() =>
-                    run(() =>
-                      doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
-                    )
-                  }
-                  className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
-                >
-                  今すぐやる
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() =>
+                      run(() =>
+                        doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
+                      )
+                    }
+                    className="rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
+                  >
+                    今すぐやる
+                  </button>
+                  <TaskMenu
+                    onDelete={() => {
+                      if (window.confirm(`「${task.title}」を削除しますか？`)) {
+                        handleDelete(task);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )),
           )}

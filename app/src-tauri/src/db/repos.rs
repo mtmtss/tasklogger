@@ -64,6 +64,36 @@ pub fn get_task(conn: &Connection, task_list_id: &str, task_id: &str) -> rusqlit
     .optional()
 }
 
+/// タスクリストの選択肢一覧 (spec拡張: その場でタスク追加する際の追加先選択用)。
+pub fn fetch_task_lists(conn: &Connection) -> rusqlite::Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title FROM task_lists WHERE deleted = 0 ORDER BY title",
+    )?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// ローカルでその場で追加したタスクを挿入する。id は `local-` prefix
+/// (Google Tasks には存在しない) とし、Google 側へは同期しない (spec拡張、
+/// [[今日やるフラグ]]と同様にローカル専用の拡張として扱う)。
+/// 追加直後から「今日やる」リストに出したいので today_flag=1 で作成する。
+pub fn insert_local_task(
+    conn: &Connection,
+    task_list_id: &str,
+    title: &str,
+) -> rusqlite::Result<String> {
+    let task_id = format!("local-{}", Uuid::new_v4());
+    let now = time::to_iso(&time::now_utc());
+    conn.execute(
+        "INSERT INTO tasks (id, task_list_id, title, notes, due, status, fetched_at, today_flag)
+         VALUES (?1, ?2, ?3, '', NULL, 'needsAction', ?4, 1)",
+        params![task_id, task_list_id, title, now],
+    )?;
+    Ok(task_id)
+}
+
 pub fn get_active_session(conn: &Connection) -> rusqlite::Result<Option<ActiveSessionRow>> {
     conn.query_row(
         "SELECT task_list_id, task_list_name, task_id, task_title, start_at
@@ -284,6 +314,22 @@ pub fn mark_task_completed_locally(
     Ok(())
 }
 
+/// タスク削除 (spec拡張)。ソフトデリート + dirty=1 で、Google Tasks 側へは
+/// push_queue 経由の "delete_task" op で同期される (ローカル専用タスクは
+/// push_queue 側で id prefix "local-" によりスキップされ、DB上のソフトデリートのみで完結する)。
+pub fn mark_task_deleted_locally(
+    conn: &Connection,
+    task_list_id: &str,
+    task_id: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE tasks SET deleted = 1, dirty = 1, today_flag = 0
+         WHERE task_list_id = ?1 AND id = ?2",
+        params![task_list_id, task_id],
+    )?;
+    Ok(())
+}
+
 /// due の更新 (Google Tasks へ同期される)。`None` で期限をクリアする。
 pub fn set_task_due_locally(
     conn: &Connection,
@@ -488,6 +534,39 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(task.due, None);
+    }
+
+    /// insert_local_task: local- prefix の id で作成され、today_flag が立った状態で
+    /// 未完了一覧に現れる。
+    #[test]
+    fn insert_local_task_creates_today_task() {
+        let conn = crate::db::open_in_memory().unwrap();
+        seed_sample_data(&conn).unwrap();
+
+        let task_id = insert_local_task(&conn, "sample-list-1", "買い物リストを作る").unwrap();
+        assert!(task_id.starts_with("local-"));
+
+        let task = get_task(&conn, "sample-list-1", &task_id).unwrap().unwrap();
+        assert_eq!(task.title, "買い物リストを作る");
+        assert_eq!(task.status, "needsAction");
+        assert!(task.today_flag);
+
+        let open = fetch_open_tasks(&conn).unwrap();
+        assert!(open.iter().any(|t| t.id == task_id));
+    }
+
+    /// mark_task_deleted_locally: 未完了一覧から消え、dirty=1 になって sync_queue に積める。
+    #[test]
+    fn mark_task_deleted_locally_removes_from_open_tasks() {
+        let conn = crate::db::open_in_memory().unwrap();
+        seed_sample_data(&conn).unwrap();
+
+        mark_task_deleted_locally(&conn, "sample-list-1", "sample-task-1").unwrap();
+        enqueue_sync_op(&conn, "delete_task", "sample-list-1", "sample-task-1", "{}").unwrap();
+
+        let open = fetch_open_tasks(&conn).unwrap();
+        assert!(open.iter().all(|t| t.id != "sample-task-1"));
+        assert_eq!(sync_queue_count(&conn).unwrap(), 1);
     }
 }
 

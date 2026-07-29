@@ -3,6 +3,7 @@ pub mod dashboard;
 pub mod import_export;
 pub mod session;
 pub mod settings;
+pub mod task;
 
 use tauri::Emitter;
 
