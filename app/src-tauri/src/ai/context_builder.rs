@@ -87,21 +87,27 @@ pub fn build_payload(conn: &Connection, note: &str) -> Result<String, String> {
     let open_tasks = repos::fetch_open_tasks(conn).map_err(|e| e.to_string())?;
     let (today_tasks, candidates): (Vec<_>, Vec<_>) = open_tasks
         .into_iter()
-        .partition(|t| time::is_due_today(&t.due));
+        .partition(|t| time::is_due_today(&t.due) || t.today_flag);
 
-    out.push_str("# 今日期限のタスク\n");
+    out.push_str("# 今日のタスク (期限が今日、または今日やるに追加済み)\n");
     if today_tasks.is_empty() {
         out.push_str("(なし)\n");
     }
     for t in &today_tasks {
         let (secs, app_status, _) = status::lookup(&stats_today, &t.task_list_id, &t.id);
         let s = task_stats(conn, &t.task_list_id, &t.id);
+        let deadline = if time::is_due_today(&t.due) {
+            "期限=今日"
+        } else {
+            "期限=なし(今日やるに追加済み)"
+        };
         out.push_str(&format!(
-            "- [{}] {} (taskListId={}, taskId={}) 状態={:?} 本日実績={}分 過去平均={}分/回×{}回{}{}\n",
+            "- [{}] {} (taskListId={}, taskId={}) {} 状態={:?} 本日実績={}分 過去平均={}分/回×{}回{}{}\n",
             t.task_list_title,
             t.title,
             t.task_list_id,
             t.id,
+            deadline,
             app_status,
             time::ceil_minutes(secs),
             s.avg_minutes,
@@ -239,7 +245,7 @@ mod tests {
         let payload = build_payload(&conn, "午後から外出").unwrap();
         assert!(payload.contains("# 現在"));
         assert!(payload.contains("午後から外出"));
-        assert!(payload.contains("# 今日期限のタスク"));
+        assert!(payload.contains("# 今日のタスク"));
         assert!(payload.contains("taskId=sample-task-1"));
         assert!(payload.contains("# 候補タスク"));
         assert!(payload.contains("# 実績ペース"));

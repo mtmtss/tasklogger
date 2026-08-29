@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   generateDailyPlan,
@@ -9,6 +9,7 @@ import {
   type PlanTaskItem,
   type StoredPlan,
 } from "../lib/commands";
+import { useDashboard } from "../lib/queries";
 
 /**
  * AI 拡張「今日の作戦」カード (docs/ai-extension-specification.md §3.4)。
@@ -20,6 +21,7 @@ export default function DailyPlanCard({
   onError: (message: string) => void;
 }) {
   const aiStatus = useQuery({ queryKey: ["aiStatus"], queryFn: getAiStatus });
+  const dashboard = useDashboard();
   const [plan, setPlan] = useState<StoredPlan | null>(null);
   const [note, setNote] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -29,6 +31,16 @@ export default function DailyPlanCard({
   useEffect(() => {
     getDailyPlan().then(setPlan).catch(() => {});
   }, []);
+
+  const todayKeys = useMemo(
+    () =>
+      new Set(
+        dashboard.data?.taskGroups.flatMap((group) =>
+          group.tasks.map((task) => `${task.taskListId} ${task.taskId}`),
+        ) ?? [],
+      ),
+    [dashboard.data],
+  );
 
   if (!aiStatus.data?.configured) return null;
 
@@ -119,18 +131,21 @@ export default function DailyPlanCard({
                 title="必ずやる"
                 accent="text-rose-300"
                 items={plan.plan.must_do}
+                todayKeys={todayKeys}
                 onAct={act}
               />
               <PlanSection
                 title="できればやる"
                 accent="text-sky-300"
                 items={plan.plan.if_possible}
+                todayKeys={todayKeys}
                 onAct={act}
               />
               <PlanSection
                 title="5分でできる"
                 accent="text-emerald-300"
                 items={plan.plan.five_minute}
+                todayKeys={todayKeys}
                 onAct={act}
               />
 
@@ -162,11 +177,13 @@ function PlanSection({
   title,
   accent,
   items,
+  todayKeys,
   onAct,
 }: {
   title: string;
   accent: string;
   items: PlanTaskItem[];
+  todayKeys: Set<string>;
   onAct: (fn: () => Promise<unknown>) => void;
 }) {
   if (items.length === 0) return null;
@@ -174,44 +191,56 @@ function PlanSection({
     <div>
       <h3 className={`mb-1.5 text-xs font-semibold ${accent}`}>{title}</h3>
       <ul className="space-y-1.5">
-        {items.map((item, i) => (
-          <li
-            key={i}
-            className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm text-slate-200">
-                  {item.title}
-                  <span className="ml-2 text-xs text-slate-500">
-                    約{item.estimatedMinutes}分
-                  </span>
-                </p>
-                <p className="mt-0.5 text-xs text-violet-300/90">
-                  最初の一手: {item.firstStep}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">{item.reason}</p>
-              </div>
-              {item.taskListId && item.taskId && (
-                <div className="flex shrink-0 gap-1.5">
-                  <button
-                    onClick={() =>
-                      onAct(() =>
-                        scheduleForToday({
-                          taskListId: item.taskListId!,
-                          taskId: item.taskId!,
-                        }),
-                      )
-                    }
-                    className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                  >
-                    今日やる
-                  </button>
+        {items.map((item, i) => {
+          const added =
+            !!item.taskListId &&
+            !!item.taskId &&
+            todayKeys.has(`${item.taskListId} ${item.taskId}`);
+          return (
+            <li
+              key={i}
+              className="rounded-md border border-slate-800 bg-slate-900/50 px-3 py-2"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-200">
+                    {item.title}
+                    <span className="ml-2 text-xs text-slate-500">
+                      約{item.estimatedMinutes}分
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-violet-300/90">
+                    最初の一手: {item.firstStep}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">{item.reason}</p>
                 </div>
-              )}
-            </div>
-          </li>
-        ))}
+                {item.taskListId && item.taskId && (
+                  <div className="flex shrink-0 gap-1.5">
+                    {added ? (
+                      <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
+                        ✓ 追加済み
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          onAct(() =>
+                            scheduleForToday({
+                              taskListId: item.taskListId!,
+                              taskId: item.taskId!,
+                            }),
+                          )
+                        }
+                        className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                      >
+                        今日やる
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
