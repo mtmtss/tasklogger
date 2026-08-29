@@ -56,3 +56,8 @@ export interface TaskRef {
   taskListId: string;
   taskId: string;
 }
+
+export interface TaskListOption {
+  taskListId: string;
+  taskListName: string;
+}

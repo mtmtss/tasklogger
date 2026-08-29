@@ -1,10 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TaskGroup, TaskRef, TodayDashboard } from "../types";
+import type { TaskGroup, TaskItem, TaskListOption, TaskRef, TodayDashboard } from "../types";
 
 export const getTodayDashboard = () =>
   invoke<TodayDashboard>("get_today_dashboard");
 
 export const getCandidates = () => invoke<TaskGroup[]>("get_candidates");
+
+export const getTaskLists = () => invoke<TaskListOption[]>("get_task_lists");
+
+export const createTask = (taskListId: string, title: string) =>
+  invoke<TaskItem>("create_task", { taskListId, title });
+
+export const deleteTask = (task: TaskRef) => invoke<void>("delete_task", { task });
+
+export interface RestoreTaskResult {
+  restored: boolean;
+  /** Google 側で削除済みだったため新しいタスクとして作り直した (task_id が変わる)。 */
+  recreated: boolean;
+}
+
+export const restoreTask = (task: TaskRef) =>
+  invoke<RestoreTaskResult>("restore_task", { task });
 
 export const startTask = (task: TaskRef) => invoke<void>("start_task", { task });
 

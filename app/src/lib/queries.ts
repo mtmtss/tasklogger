@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { getCandidates, getSyncStatus, getTodayDashboard } from "./commands";
+import { getCandidates, getSyncStatus, getTaskLists, getTodayDashboard } from "./commands";
 import type { ActiveSessionView } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
 
@@ -10,6 +10,9 @@ export const useDashboard = () =>
 
 export const useCandidates = () =>
   useQuery({ queryKey: ["candidates"], queryFn: getCandidates });
+
+export const useTaskLists = () =>
+  useQuery({ queryKey: ["taskLists"], queryFn: getTaskLists });
 
 export const useSyncStatus = () =>
   useQuery({ queryKey: ["syncStatus"], queryFn: getSyncStatus });

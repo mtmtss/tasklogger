@@ -11,6 +11,7 @@ use crate::state::AppState;
 
 struct QueueRow {
     id: i64,
+    op_type: String,
     task_list_id: String,
     task_id: String,
     payload: serde_json::Value,
@@ -64,7 +65,7 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
     let rows: Vec<QueueRow> = {
         let conn = state.db.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT id, task_list_id, task_id, payload FROM sync_queue ORDER BY id")
+            .prepare("SELECT id, op_type, task_list_id, task_id, payload FROM sync_queue ORDER BY id")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
@@ -73,14 +74,16 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
                 ))
             })
             .map_err(|e| e.to_string())?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|e| e.to_string())?;
         rows.into_iter()
-            .map(|(id, list, task, payload)| QueueRow {
+            .map(|(id, op_type, list, task, payload)| QueueRow {
                 id,
+                op_type,
                 task_list_id: list,
                 task_id: task,
                 payload: serde_json::from_str(&payload).unwrap_or(serde_json::json!({})),
@@ -91,15 +94,25 @@ fn push_queue(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
     let mut last_error: Option<String> = None;
 
     for row in rows {
-        // ローカル専用のサンプルデータ (spec: id LIKE 'sample-%') はリモートに存在しないため
-        // API を呼ばずに破棄する (400 Bad Request で無限リトライになるのを防ぐ)。
-        if row.task_list_id.starts_with("sample-") || row.task_id.starts_with("sample-") {
+        // ローカル専用のサンプルデータ/その場で追加したタスク (spec: id LIKE 'sample-%' /
+        // 'local-%') はリモートに存在しないため API を呼ばずに破棄する
+        // (400/404 で無限リトライになるのを防ぐ)。
+        if row.task_list_id.starts_with("sample-")
+            || row.task_id.starts_with("sample-")
+            || row.task_id.starts_with("local-")
+        {
             let conn = state.db.lock().unwrap();
             let _ = conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![row.id]);
             continue;
         }
 
-        match tasks_api::patch_task(token, &row.task_list_id, &row.task_id, &row.payload) {
+        let result = if row.op_type == "delete_task" {
+            tasks_api::delete_task(token, &row.task_list_id, &row.task_id)
+        } else {
+            tasks_api::patch_task(token, &row.task_list_id, &row.task_id, &row.payload)
+        };
+
+        match result {
             Ok(()) => {
                 let conn = state.db.lock().unwrap();
                 let _ = conn.execute("DELETE FROM sync_queue WHERE id = ?1", params![row.id]);
@@ -211,11 +224,12 @@ fn pull_tasks(app: &tauri::AppHandle, token: &str) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         }
         // 未完了フェッチに現れなかった行 = リモートで完了/削除された未完了タスク。
-        // ローカル未 push 変更 (dirty) は保護する
+        // ローカル未 push 変更 (dirty) は保護する。「その場で追加」したローカル専用
+        // タスク (id: local-*) はリモートに存在しないので対象外にする。
         conn.execute(
             "UPDATE tasks SET deleted = 1
              WHERE task_list_id = ?1 AND dirty = 0 AND fetched_at < ?2
-               AND id NOT LIKE 'sample-%'",
+               AND id NOT LIKE 'sample-%' AND id NOT LIKE 'local-%'",
             params![list.id, pull_started],
         )
         .map_err(|e| e.to_string())?;

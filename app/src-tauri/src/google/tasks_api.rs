@@ -141,6 +141,19 @@ pub fn patch_task(
     Ok(())
 }
 
+/// tasks.delete。既にリモートに存在しない (404/410) 場合は ApiError::Gone として
+/// 返り、呼び出し側でローカルの削除状態と収束させる。
+pub fn delete_task(token: &str, task_list_id: &str, task_id: &str) -> Result<(), ApiError> {
+    let client = client()?;
+    let response = client
+        .delete(format!("{BASE}/lists/{task_list_id}/tasks/{task_id}"))
+        .bearer_auth(token)
+        .send()
+        .map_err(net_err)?;
+    check(response)?;
+    Ok(())
+}
+
 fn net_err(e: reqwest::Error) -> ApiError {
     ApiError::Other(format!("ネットワークエラー: {e}"))
 }

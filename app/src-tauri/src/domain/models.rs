@@ -86,6 +86,25 @@ pub struct TaskRef {
     pub task_id: String,
 }
 
+/// タスクをその場で追加する際の、追加先タスクリストの選択肢。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListOption {
+    pub task_list_id: String,
+    pub task_list_name: String,
+}
+
+/// タスク削除の取り消し (undo) 結果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreTaskResult {
+    /// 復元できたか。
+    pub restored: bool,
+    /// Google 側で既に削除済みだったため、同じ内容の新規ローカルタスクとして
+    /// 作り直したか (作り直した場合、元のタスクとは task_id が変わる)。
+    pub recreated: bool,
+}
+
 /// DB から読んだ work_logs の 1 行 (状態導出・集計に使う最小限)。
 #[derive(Debug, Clone)]
 pub struct WorkLogRow {

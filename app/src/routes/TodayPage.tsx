@@ -1,30 +1,45 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   completeTaskDirect,
+  createTask,
+  deleteTask,
   doItNow,
+  restoreTask,
   startTask,
   stopTask,
   toggleFloatWindow,
   updateTaskDue,
 } from "../lib/commands";
-import { useCandidates, useDashboard } from "../lib/queries";
+import { useCandidates, useDashboard, useTaskLists } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
+import QuickAddTask from "../components/QuickAddTask";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
+import TaskMenu from "../components/TaskMenu";
 
 export default function TodayPage() {
   const dashboard = useDashboard();
   const candidates = useCandidates();
+  const taskLists = useTaskLists();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // 直近に削除したタスク。数秒間だけ「元に戻す」トーストを出す。
+  const [deleted, setDeleted] = useState<TaskItem | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["candidates"] });
   };
+
+  useEffect(() => {
+    if (!deleted) return;
+    const id = setTimeout(() => setDeleted(null), 6000);
+    return () => clearTimeout(id);
+  }, [deleted]);
 
   const run = (fn: () => Promise<unknown>) => {
     setError(null);
@@ -44,6 +59,57 @@ export default function TodayPage() {
         );
   const handleUpdateDue = (task: TaskItem, due: string | null) =>
     run(() => updateTaskDue({ taskListId: task.taskListId, taskId: task.taskId }, due));
+  const handleDelete = (task: TaskItem) => {
+    setError(null);
+    setNotice(null);
+    deleteTask({ taskListId: task.taskListId, taskId: task.taskId })
+      .then(() => {
+        refresh();
+        setDeleted(task);
+      })
+      .catch((e) => setError(String(e)));
+  };
+  const handleUndoDelete = () => {
+    if (!deleted) return;
+    const task = deleted;
+    setDeleted(null);
+    setError(null);
+    restoreTask({ taskListId: task.taskListId, taskId: task.taskId })
+      .then((res) => {
+        refresh();
+        setNotice(
+          res.recreated
+            ? `「${task.title}」を復元しました。Google 側で削除済みだったため、新しいタスクとして作り直しています。`
+            : null,
+        );
+      })
+      .catch((e) => setError(String(e)));
+  };
+  const handleAddTask = (taskListId: string, title: string) => {
+    setError(null);
+    return createTask(taskListId, title)
+      .then(refresh)
+      .catch((e) => {
+        setError(String(e));
+        throw e;
+      });
+  };
+  const handleAddAndStartTask = (taskListId: string, title: string) => {
+    setError(null);
+    return createTask(taskListId, title)
+      .catch((e) => {
+        setError(String(e));
+        throw e; // 作成に失敗したときだけ、入力内容を残すため呼び出し元にも伝える
+      })
+      .then((task) =>
+        // 実行中タスクがある場合など、開始だけ失敗しても作成は成立している。
+        // 追加をなかったことにはせず、メッセージで知らせるだけに留める。
+        doItNow({ taskListId: task.taskListId, taskId: task.taskId }).catch((e) =>
+          setError(`タスクは追加しましたが、開始できませんでした: ${String(e)}`),
+        ),
+      )
+      .then(refresh);
+  };
 
   const data = dashboard.data;
 
@@ -77,6 +143,26 @@ export default function TodayPage() {
             閉じる
           </button>
         </div>
+      )}
+
+      {notice && (
+        <div className="rounded-md border border-sky-500/50 bg-sky-500/10 px-4 py-2 text-sm text-sky-200">
+          {notice}
+          <button
+            onClick={() => setNotice(null)}
+            className="ml-3 text-xs text-sky-400 underline"
+          >
+            閉じる
+          </button>
+        </div>
+      )}
+
+      {taskLists.data && taskLists.data.length > 0 && (
+        <QuickAddTask
+          taskLists={taskLists.data}
+          onAdd={handleAddTask}
+          onAddAndStart={handleAddAndStartTask}
+        />
       )}
 
       {data && (
@@ -127,6 +213,7 @@ export default function TodayPage() {
                 onPause={handlePause}
                 onComplete={handleComplete}
                 onUpdateDue={handleUpdateDue}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -186,21 +273,45 @@ export default function TodayPage() {
                   </span>
                   <span className="truncate text-sm">{task.title}</span>
                 </div>
-                <button
-                  onClick={() =>
-                    run(() =>
-                      doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
-                    )
-                  }
-                  className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
-                >
-                  今すぐやる
-                </button>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() =>
+                      run(() =>
+                        doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
+                      )
+                    }
+                    className="rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
+                  >
+                    今すぐやる
+                  </button>
+                  <TaskMenu onDelete={() => handleDelete(task)} />
+                </div>
               </div>
             )),
           )}
         </div>
       </div>
+
+      {deleted && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-rose-500/40 bg-slate-900 px-4 py-2.5 text-sm text-slate-200 shadow-xl">
+          <span className="truncate">
+            「{deleted.title}」を<span className="text-rose-400">削除しました</span>
+          </span>
+          <button
+            onClick={handleUndoDelete}
+            className="shrink-0 rounded-md border border-rose-500/50 bg-rose-500/15 px-3 py-1 text-xs font-medium text-rose-300 hover:bg-rose-500/25"
+          >
+            元に戻す
+          </button>
+          <button
+            onClick={() => setDeleted(null)}
+            aria-label="閉じる"
+            className="shrink-0 text-slate-500 hover:text-slate-300"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </section>
   );
 }
