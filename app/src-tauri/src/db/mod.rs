@@ -78,11 +78,37 @@ const MIGRATIONS: &[&str] = &[
       value TEXT NOT NULL
     );
     "#,
-    // v2: 「今日やる」ローカル専用フラグ (Google Tasks へは同期しない)
-    r#"
-    ALTER TABLE tasks ADD COLUMN today_flag INTEGER NOT NULL DEFAULT 0;
-    "#,
 ];
+
+/// 環境によって user_version=2 の中身が食い違うため、通し番号ではなく
+/// 実スキーマの存在確認で冪等に適用する。
+fn migrate_today_flag_column(conn: &Connection) -> rusqlite::Result<()> {
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'today_flag'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        conn.execute_batch("ALTER TABLE tasks ADD COLUMN today_flag INTEGER NOT NULL DEFAULT 0;")?;
+    }
+    Ok(())
+}
+
+fn migrate_daily_plans_table(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS daily_plans (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_date    TEXT NOT NULL,
+          generated_at TEXT NOT NULL,
+          input_note   TEXT NOT NULL DEFAULT '',
+          model        TEXT NOT NULL,
+          plan_json    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_daily_plans_date ON daily_plans(plan_date);
+        "#,
+    )
+}
 
 pub fn open(db_path: &Path) -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open(db_path)?;
@@ -100,13 +126,19 @@ pub fn open_in_memory() -> Result<Connection, rusqlite::Error> {
 }
 
 fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let mut version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     for (i, sql) in MIGRATIONS.iter().enumerate() {
         let target = (i + 1) as i64;
         if version < target {
             conn.execute_batch(sql)?;
+            version = target;
             conn.pragma_update(None, "user_version", target)?;
         }
+    }
+    migrate_today_flag_column(conn)?;
+    migrate_daily_plans_table(conn)?;
+    if version < 2 {
+        conn.pragma_update(None, "user_version", 2)?;
     }
     Ok(())
 }

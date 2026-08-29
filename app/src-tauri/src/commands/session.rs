@@ -204,6 +204,25 @@ pub fn dismiss_interrupted(app: tauri::AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+/// 今日やるに入れる (AI 拡張仕様 §3.4): 今日やるフラグを立てるのみ。開始はしない。due は変更しない。
+#[tauri::command]
+pub fn schedule_for_today(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task: TaskRef,
+) -> CmdResult<()> {
+    {
+        let conn = state.db.lock().unwrap();
+        let row = repos::get_task(&conn, &task.task_list_id, &task.task_id)
+            .map_err(db_err)?
+            .ok_or("タスクが見つかりません。")?;
+
+        repos::set_today_flag(&conn, &row.task_list_id, &row.id, true).map_err(db_err)?;
+    }
+    emit_tasks_changed(&app);
+    Ok(())
+}
+
 /// 今すぐやる (spec §5.3): 今日やるフラグを立てて即開始。due は変更しない。
 /// 別タスク running 中はブロック。
 #[tauri::command]

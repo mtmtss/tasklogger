@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   completeTaskDirect,
   doItNow,
+  scheduleForToday,
   startTask,
   stopTask,
   toggleFloatWindow,
@@ -11,6 +12,7 @@ import {
 import { useCandidates, useDashboard } from "../lib/queries";
 import { formatJapaneseDate, formatMinutes } from "../lib/format";
 import type { TaskItem } from "../types";
+import DailyPlanCard from "../components/DailyPlanCard";
 import RunningPanel from "../components/RunningPanel";
 import SyncBadge from "../components/SyncBadge";
 import TaskCard from "../components/TaskCard";
@@ -58,6 +60,7 @@ export default function TodayPage() {
         </h1>
         <div className="flex items-center gap-3">
           <SyncBadge onError={setError} />
+          <DailyPlanCard onError={setError} />
           <button
             onClick={() => void toggleFloatWindow()}
             className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
@@ -186,16 +189,31 @@ export default function TodayPage() {
                   </span>
                   <span className="truncate text-sm">{task.title}</span>
                 </div>
-                <button
-                  onClick={() =>
-                    run(() =>
-                      doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
-                    )
-                  }
-                  className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
-                >
-                  今すぐやる
-                </button>
+                <div className="flex shrink-0 gap-1.5">
+                  <button
+                    onClick={() =>
+                      run(() =>
+                        doItNow({ taskListId: task.taskListId, taskId: task.taskId }),
+                      )
+                    }
+                    className="rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500"
+                  >
+                    今すぐやる
+                  </button>
+                  <button
+                    onClick={() =>
+                      run(() =>
+                        scheduleForToday({
+                          taskListId: task.taskListId,
+                          taskId: task.taskId,
+                        }),
+                      )
+                    }
+                    className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+                  >
+                    今日やる
+                  </button>
+                </div>
               </div>
             )),
           )}

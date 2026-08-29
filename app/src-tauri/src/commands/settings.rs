@@ -18,6 +18,9 @@ const ALLOWED_KEYS: &[&str] = &[
     "sheet_sync_enabled",
     "log_spreadsheet_id",
     "last_sheet_sync_at",
+    "ai_model",
+    "ai_user_context",
+    "ai_auto_plan",
 ];
 
 #[tauri::command]
