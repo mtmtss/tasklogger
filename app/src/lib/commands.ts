@@ -13,6 +13,15 @@ export const createTask = (taskListId: string, title: string) =>
 
 export const deleteTask = (task: TaskRef) => invoke<void>("delete_task", { task });
 
+export interface RestoreTaskResult {
+  restored: boolean;
+  /** Google 側で削除済みだったため新しいタスクとして作り直した (task_id が変わる)。 */
+  recreated: boolean;
+}
+
+export const restoreTask = (task: TaskRef) =>
+  invoke<RestoreTaskResult>("restore_task", { task });
+
 export const startTask = (task: TaskRef) => invoke<void>("start_task", { task });
 
 export const stopTask = (action: "paused" | "completed", memo?: string) =>

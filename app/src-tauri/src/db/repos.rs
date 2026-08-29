@@ -322,8 +322,56 @@ pub fn mark_task_deleted_locally(
     task_list_id: &str,
     task_id: &str,
 ) -> rusqlite::Result<()> {
+    // today_flag は温存する (削除は deleted=1 だけで一覧から隠れる)。undo 時に
+    // 元の「今日やる / 候補」区分をそのまま復元できるようにするため。
     conn.execute(
-        "UPDATE tasks SET deleted = 1, dirty = 1, today_flag = 0
+        "UPDATE tasks SET deleted = 1, dirty = 1
+         WHERE task_list_id = ?1 AND id = ?2",
+        params![task_list_id, task_id],
+    )?;
+    Ok(())
+}
+
+/// 未 push の delete_task op が sync_queue に残っているか (undo 可能かの判定用)。
+/// 残っていれば「まだ Google に反映されていない」とみなせる。
+pub fn has_pending_delete_op(
+    conn: &Connection,
+    task_list_id: &str,
+    task_id: &str,
+) -> rusqlite::Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sync_queue
+         WHERE op_type = 'delete_task' AND task_list_id = ?1 AND task_id = ?2",
+        params![task_list_id, task_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+/// delete_task op を sync_queue から取り除く (undo 用)。
+pub fn remove_pending_delete_op(
+    conn: &Connection,
+    task_list_id: &str,
+    task_id: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM sync_queue
+         WHERE op_type = 'delete_task' AND task_list_id = ?1 AND task_id = ?2",
+        params![task_list_id, task_id],
+    )?;
+    Ok(())
+}
+
+/// ソフトデリートを取り消す (undo)。まだ Google に push されていないケース専用
+/// なので dirty=0 (クリーンな同期状態) に戻す。today_flag は削除時に温存して
+/// あるのでここでは触らない。
+pub fn undo_task_delete_locally(
+    conn: &Connection,
+    task_list_id: &str,
+    task_id: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE tasks SET deleted = 0, dirty = 0
          WHERE task_list_id = ?1 AND id = ?2",
         params![task_list_id, task_id],
     )?;
@@ -567,6 +615,26 @@ mod tests {
         let open = fetch_open_tasks(&conn).unwrap();
         assert!(open.iter().all(|t| t.id != "sample-task-1"));
         assert_eq!(sync_queue_count(&conn).unwrap(), 1);
+    }
+
+    /// undo: 未 push の delete_task op を取り消すと、キューが空になり
+    /// タスクが未完了一覧へ戻る。
+    #[test]
+    fn undo_task_delete_restores_open_task_and_clears_queue() {
+        let conn = crate::db::open_in_memory().unwrap();
+        seed_sample_data(&conn).unwrap();
+
+        mark_task_deleted_locally(&conn, "sample-list-1", "sample-task-1").unwrap();
+        enqueue_sync_op(&conn, "delete_task", "sample-list-1", "sample-task-1", "{}").unwrap();
+        assert!(has_pending_delete_op(&conn, "sample-list-1", "sample-task-1").unwrap());
+
+        remove_pending_delete_op(&conn, "sample-list-1", "sample-task-1").unwrap();
+        undo_task_delete_locally(&conn, "sample-list-1", "sample-task-1").unwrap();
+
+        assert!(!has_pending_delete_op(&conn, "sample-list-1", "sample-task-1").unwrap());
+        assert_eq!(sync_queue_count(&conn).unwrap(), 0);
+        let open = fetch_open_tasks(&conn).unwrap();
+        assert!(open.iter().any(|t| t.id == "sample-task-1"));
     }
 }
 

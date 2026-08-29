@@ -4,13 +4,16 @@ import type { TaskListOption } from "../types";
 interface Props {
   taskLists: TaskListOption[];
   onAdd: (taskListId: string, title: string) => Promise<unknown>;
+  /** 追加したタスクをそのまま開始する。開始できなかった場合も追加自体は成立する。 */
+  onAddAndStart: (taskListId: string, title: string) => Promise<unknown>;
 }
 
 /** タスクをその場で追加するための、インラインのクイック追加フォーム。 */
-export default function QuickAddTask({ taskLists, onAdd }: Props) {
+export default function QuickAddTask({ taskLists, onAdd, onAddAndStart }: Props) {
   const [title, setTitle] = useState("");
   const [taskListId, setTaskListId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  // 送信中のボタン種別。null なら送信していない (二重送信防止も兼ねる)。
+  const [pending, setPending] = useState<"add" | "start" | null>(null);
 
   useEffect(() => {
     if (!taskListId && taskLists.length > 0) {
@@ -18,16 +21,21 @@ export default function QuickAddTask({ taskLists, onAdd }: Props) {
     }
   }, [taskLists, taskListId]);
 
-  const canSubmit = title.trim().length > 0 && taskListId !== "" && !submitting;
+  const canSubmit = title.trim().length > 0 && taskListId !== "" && pending === null;
+
+  const submit = (kind: "add" | "start") => {
+    if (!canSubmit) return;
+    setPending(kind);
+    const action = kind === "start" ? onAddAndStart : onAdd;
+    action(taskListId, title.trim())
+      .then(() => setTitle(""))
+      .catch(() => {})
+      .finally(() => setPending(null));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
-    setSubmitting(true);
-    onAdd(taskListId, title.trim())
-      .then(() => setTitle(""))
-      .catch(() => {})
-      .finally(() => setSubmitting(false));
+    submit("add");
   };
 
   return (
@@ -58,6 +66,14 @@ export default function QuickAddTask({ taskLists, onAdd }: Props) {
         className="shrink-0 rounded-md bg-sky-600 px-3 py-1.5 text-sm text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         追加
+      </button>
+      <button
+        type="button"
+        onClick={() => submit("start")}
+        disabled={!canSubmit}
+        className="shrink-0 rounded-md bg-pink-600 px-3 py-1.5 text-sm text-white hover:bg-pink-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending === "start" ? "開始中..." : "追加して開始"}
       </button>
     </form>
   );

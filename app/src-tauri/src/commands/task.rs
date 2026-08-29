@@ -2,7 +2,7 @@ use tauri::State;
 
 use super::{db_err, emit_tasks_changed, CmdResult};
 use crate::db::repos;
-use crate::domain::models::{AppStatus, TaskItem, TaskListOption, TaskRef};
+use crate::domain::models::{AppStatus, RestoreTaskResult, TaskItem, TaskListOption, TaskRef};
 use crate::domain::time;
 use crate::state::AppState;
 
@@ -94,4 +94,51 @@ pub fn delete_task(app: tauri::AppHandle, state: State<'_, AppState>, task: Task
     emit_tasks_changed(&app);
     crate::google::kick_sync(&app);
     Ok(())
+}
+
+/// タスク削除の取り消し (undo)。直前の delete_task がまだ Google へ push されて
+/// いなければ、その op を破棄してソフトデリートを元に戻す。既に push 済み
+/// (Google 側で削除済み) の場合は、同じ内容のローカルタスクとして作り直す
+/// (この場合 task_id は変わる)。
+#[tauri::command]
+pub fn restore_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task: TaskRef,
+) -> CmdResult<RestoreTaskResult> {
+    let result = {
+        let conn = state.db.lock().unwrap();
+
+        let row = repos::get_task(&conn, &task.task_list_id, &task.task_id)
+            .map_err(db_err)?
+            .ok_or("復元するタスクが見つかりません。")?;
+
+        // ローカル専用タスク、または delete_task op がまだキューに残っている
+        // (= まだ Google に反映されていない) なら、そのまま元に戻せる。
+        let undoable = task.task_id.starts_with("local-")
+            || repos::has_pending_delete_op(&conn, &task.task_list_id, &task.task_id)
+                .map_err(db_err)?;
+
+        let tx = conn.unchecked_transaction().map_err(db_err)?;
+        let recreated = if undoable {
+            repos::remove_pending_delete_op(&tx, &task.task_list_id, &task.task_id)
+                .map_err(db_err)?;
+            repos::undo_task_delete_locally(&tx, &task.task_list_id, &task.task_id)
+                .map_err(db_err)?;
+            false
+        } else {
+            // 既に Google 側で削除済み → 同じ内容のローカルタスクとして作り直す。
+            repos::insert_local_task(&tx, &task.task_list_id, &row.title).map_err(db_err)?;
+            true
+        };
+        tx.commit().map_err(db_err)?;
+
+        RestoreTaskResult {
+            restored: true,
+            recreated,
+        }
+    };
+
+    emit_tasks_changed(&app);
+    Ok(result)
 }

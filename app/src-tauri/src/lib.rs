@@ -180,6 +180,7 @@ pub fn run() {
             commands::task::get_task_lists,
             commands::task::create_task,
             commands::task::delete_task,
+            commands::task::restore_task,
             commands::analytics::get_archive_analytics,
             commands::import_export::export_csv,
             commands::import_export::import_gas_csv,

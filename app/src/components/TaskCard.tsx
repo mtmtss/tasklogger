@@ -95,15 +95,7 @@ export default function TaskCard({
               )}
             </>
           )}
-          {!isRunning && (
-            <TaskMenu
-              onDelete={() => {
-                if (window.confirm(`「${task.title}」を削除しますか？`)) {
-                  onDelete(task);
-                }
-              }}
-            />
-          )}
+          {!isRunning && <TaskMenu onDelete={() => onDelete(task)} />}
         </div>
       </div>
       {showDuePrompt && (
